@@ -1,0 +1,65 @@
+name: Refresh domestic dashboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 수집 모드
+        required: true
+        type: choice
+        options: [close, intraday]
+        default: close
+      force:
+        description: 휴장일·장중시간 검사 무시
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # KST 평일 09:00~15:30, 30분 간격
+    - cron: "0,30 0-5 * * 1-5"
+    - cron: "0 6 * * 1-5"
+    - cron: "30 6 * * 1-5"
+    # KST 마감 확정 및 idempotent 재시도: 18:30, 19:20
+    - cron: "30 9 * * 1-5"
+    - cron: "20 10 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: domestic-dashboard-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Refresh actual market data
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          KIS_BASE_URL: https://openapi.koreainvestment.com:9443
+          KRX_OPEN_API_KEY: ${{ secrets.KRX_OPEN_API_KEY }}
+          DASHBOARD_SYNC_TOKEN: ${{ secrets.DASHBOARD_SYNC_TOKEN }}
+          DASHBOARD_API_URL: ${{ secrets.DASHBOARD_API_URL }}
+          PUBLIC_DASHBOARD_URL: ${{ secrets.PUBLIC_DASHBOARD_URL }}
+        run: |
+          MODE="${{ github.event.inputs.mode || '' }}"
+          FORCE="${{ github.event.inputs.force || 'false' }}"
+          if [ -n "$MODE" ]; then
+            if [ "$FORCE" = "true" ]; then node automation/tools/refresh_dashboard_cloud.mjs --mode="$MODE" --force; else node automation/tools/refresh_dashboard_cloud.mjs --mode="$MODE"; fi
+          else
+            node automation/tools/refresh_dashboard_cloud.mjs
+          fi
+      - name: Commit last normal static fallback only when changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dashboard/data.js
+          git diff --cached --quiet || git commit -m "chore: refresh domestic dashboard data"
+          git push

@@ -1,0 +1,11 @@
+name = "stockbot-domestic-api"
+main = "worker/index.ts"
+compatibility_date = "2026-08-01"
+
+[vars]
+PUBLIC_DASHBOARD_ORIGIN = "https://hanyabyab1212-ai.github.io"
+
+# Cloudflare 대시보드에서 이미 연결한 binding과 이름이 같습니다.
+[[r2_buckets]]
+binding = "DASHBOARD_BUCKET"
+bucket_name = "stockbot-domestic-data-hanyabyab1212"
