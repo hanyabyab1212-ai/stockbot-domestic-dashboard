@@ -6,6 +6,7 @@ import { isValidCloseBatch } from "../src/domain.mjs";
 import { loadLocalEnv } from "../src/env.mjs";
 import { collectMacroSnapshot } from "../src/macroService.mjs";
 import { collectEtfRows } from "../src/etfService.mjs";
+import { markHighUpdateDate } from "../src/marketRankings.mjs";
 
 loadLocalEnv();
 const args = new Set(process.argv.slice(2));
@@ -46,8 +47,10 @@ log("KRX/TradingView 종목 마스터를 불러옵니다.");
 const previous = await loadCloudState();
 let master;
 let marketRanks;
+let loadedMarketRanks = false;
 try {
   ({ master, marketRanks } = await loadKrxMaster());
+  loadedMarketRanks = true;
 } catch (error) {
   master = masterFromPreviousRows(previous.rows);
   marketRanks = previous.marketRanks || {};
@@ -63,6 +66,8 @@ const result = mode === "intraday" ? await collectIntradayRows(kis, master, { da
 if (result.failed.length) log(`수집 실패 ${result.failed.length}건 · 첫 원인: ${result.failed[0].message}`);
 if (mode === "close" && !isValidCloseBatch(result.rows)) throw new Error(`마감 데이터가 1,000종목 미만(${result.rows.length})이라 저장하지 않습니다.`);
 if (mode === "intraday" && result.rows.length < 1000) throw new Error(`장중 데이터가 1,000종목 미만(${result.rows.length})이라 저장하지 않습니다.`);
+
+if (mode === "close" && loadedMarketRanks) marketRanks = markHighUpdateDate(marketRanks, collectionDate);
 
 const liveSnapshot = mode === "intraday" ? { date: collectionDate, updatedAt: new Date().toISOString(), mode: "intraday-estimate", rows: result.rows } : null;
 let etfRows = [];

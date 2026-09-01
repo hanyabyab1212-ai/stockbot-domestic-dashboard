@@ -54,3 +54,10 @@ export async function loadTradingViewMarketRankings(options = {}) {
   const daily = stocks.filter((item) => Number(item.tradingVolume) > 0 && Number(item.dailyChangePct) !== 0).sort((a, b) => Number(b.dailyChangePct) - Number(a.dailyChangePct));
   return { stocks, marketRanks: { highs, daily, weekly: [] } };
 }
+
+// TradingView의 당일 고가가 52주 최고가와 같은 종목만 `highs`에 남는다.
+// 따라서 마감 수집의 거래일을 신고가가 확인·갱신된 날짜로 함께 보관한다.
+export function markHighUpdateDate(marketRanks, date) {
+  if (!/^\d{8}$/.test(String(date || ""))) return marketRanks;
+  return { ...marketRanks, highs: (marketRanks?.highs || []).map((item) => ({ ...item, highUpdatedAt: date })) };
+}
