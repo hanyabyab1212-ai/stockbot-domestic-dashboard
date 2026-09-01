@@ -7,7 +7,7 @@
   const API = String(window.STOCKBOT_API_URL || "").replace(/\/$/, "");
   const state = { data: FALLBACK, selectedCode: "005930", days: 7, actor: "foreignWon", direction: "buy", etfCategory: "업종별", momentumMode: "high", market: "유가", period: "day", directionMove: "up" };
   const nav = [
-    ["macro", "macro.html", "거시지표", "◎"], ["trade", "trade.html", "수출입데이터", "⇄"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
+    ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
   ];
   const number = (value, fallback = null) => {
     const parsed = Number(value);
@@ -74,44 +74,6 @@
     return sources.map(([url, label]) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${esc(label)} <span aria-hidden="true">↗</span></a>`).join("<span class=\"macro-source-divider\">·</span>");
   };
   const macroCards = (items) => items.map((item) => `<article class="panel macro"><div class="panel-head"><div><h3>${esc(item.name)}</h3><div class="small">${esc(item.symbol || "-")}</div></div><span class="${signClass(item.change ?? item.changePct)}">${macroChange(item)}</span></div><div class="macro-value ${item.price == null ? "muted" : ""}">${macroValue(item)}</div><div class="small">기준일 · ${esc(item.asOf ? macroDate(item.asOf) : item.status || "연결 대기")}</div><div class="small macro-source">출처 · ${macroSourceLinks(item)}</div>${item.note ? `<div class="small macro-note">${esc(item.note)}</div>` : ""}</article>`).join("") || empty();
-  const tradePlaceholders = [
-    { id: "semiconductors", name: "반도체", hsLabel: "HS 8542 · 전자집적회로", rows: [] },
-    { id: "cosmetics", name: "화장품 전체", hsLabel: "HS 3303–3307 · 향수·기초·색조·헤어·구강 등", rows: [] },
-    { id: "color-cosmetics", name: "색조 화장품", hsLabel: "HS 330410·20·30·491 · 립·아이·네일·파우더", rows: [] },
-    { id: "skin-care", name: "기초 화장품", hsLabel: "HS 330499 · 의약품 제외 피부관리 제제", rows: [] }
-  ];
-  const tradeStored = () => {
-    const stored = Array.isArray(state.data.trade?.categories) ? state.data.trade.categories : [];
-    return tradePlaceholders.map((placeholder) => ({ ...placeholder, ...(stored.find((category) => category?.id === placeholder.id) || {}) }));
-  };
-  const tradePeriod = (period) => /^\d{6}$/.test(String(period)) ? `${String(period).slice(0, 4)}.${String(period).slice(4, 6)}` : "-";
-  const tradeUsd = (value) => value == null || !Number.isFinite(Number(value)) ? "연결 대기" : `$${(Number(value) / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억`;
-  const tradePreviousYear = (period) => /^\d{6}$/.test(String(period)) ? `${Number(String(period).slice(0, 4)) - 1}${String(period).slice(4, 6)}` : "";
-  const tradeLatest = (category) => [...(category.rows || [])].filter((row) => number(row.value) != null).sort((a, b) => String(a.period).localeCompare(String(b.period))).at(-1) || null;
-  const tradeChangePct = (category, current) => {
-    if (!current) return null;
-    const prior = (category.rows || []).find((row) => String(row.period) === tradePreviousYear(current.period));
-    const currentValue = number(current.value), priorValue = number(prior?.value);
-    return currentValue != null && priorValue ? (currentValue - priorValue) / priorValue * 100 : null;
-  };
-  const tradeCards = (categories) => categories.map((category) => {
-    const current = tradeLatest(category), changePct = tradeChangePct(category, current), change = changePct == null ? "전년 동월 대기" : pct(changePct, 1);
-    return `<article class="panel macro"><div class="panel-head"><div><h3>${esc(category.name)}</h3><div class="small">${esc(category.hsLabel || "HS 코드 확인 중")}</div></div><span class="${signClass(changePct)}">${change}</span></div><div class="macro-value ${current ? "" : "muted"}">${tradeUsd(current?.value)}</div><div class="small">수출 기준월 · ${tradePeriod(current?.period)}</div><div class="small macro-source">출처 · <a href="https://comtradeplus.un.org/TradeFlow" target="_blank" rel="noopener noreferrer">UN Comtrade <span aria-hidden="true">↗</span></a></div></article>`;
-  }).join("");
-  const tradeRows = (categories) => {
-    const byId = new Map(categories.map((category) => [category.id, new Map((category.rows || []).map((row) => [String(row.period), row.value]))]));
-    const periods = [...new Set(categories.flatMap((category) => (category.rows || []).map((row) => String(row.period))))].sort().reverse();
-    return periods.map((period) => `<tr><td>${tradePeriod(period)}</td>${categories.map((category) => `<td>${tradeUsd(byId.get(category.id)?.get(period))}</td>`).join("")}</tr>`).join("");
-  };
-  const partnerName = (partner) => {
-    try { return partner.iso ? new Intl.DisplayNames(["ko"], { type: "region" }).of(partner.iso) || partner.name : partner.name; } catch { return partner.name; }
-  };
-  const partnerTable = (partners) => partners.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>순위</th><th>국가</th><th>수출액</th><th>비중</th></tr></thead><tbody>${partners.map((partner, index) => `<tr><td class="rank ${index < 3 ? "top" : ""}">${index + 1}</td><td><strong>${esc(partnerName(partner))}</strong> <span class="muted">${esc(partner.iso || "")}</span></td><td>${tradeUsd(partner.value)}</td><td>${pct(partner.sharePct, 1)}</td></tr>`).join("")}</tbody></table></div>` : empty("국가별 수출 통계를 불러오는 중입니다.");
-  const storedPartners = (trade, productId) => {
-    if (Array.isArray(trade?.topPartners)) return productId === "cosmetics" ? trade.topPartners : [];
-    const partners = trade?.topPartners?.[productId];
-    return Array.isArray(partners) ? partners : [];
-  };
   const active = (condition) => condition ? " active" : "";
   const row = (raw) => Object.fromEntries(COLS.map((column, index) => [column, raw[index]]));
   const rows = () => {
@@ -194,10 +156,6 @@
       if (board) board.innerHTML = macroCards([...macroStored(), ...(result.macro || [])]);
     } catch { /* 저장된 거시지표 카드를 유지한다 */ }
   }
-  const renderTrade = () => {
-    const categories = tradeStored(), rows = tradeRows(categories), trade = state.data.trade || {};
-    html("수출입데이터", "Korea Export Monitor", "반도체와 화장품의 한국 월간 수출액을 확인합니다. 현재는 수출 지표를 제공하며, 수입 품목은 필요해지면 같은 기준으로 추가할 수 있습니다.", `<div class="notice">화장품은 전체(HS 3303–3307), 색조(립·아이·네일·파우더), 기초(의약품 제외 피부관리 제제)로 분리합니다. 공개 월간 통계의 발표 시차가 있습니다.</div><section class="grid two">${tradeCards(categories)}</section><section class="grid two" style="margin-top:18px"><section class="panel"><div class="panel-head"><h2>화장품 상위 수출국</h2><span class="small">${esc(trade.asOf ? `${tradePeriod(trade.asOf)} · 전체 기준` : "첫 마감 수집 후 표시")}</span></div>${partnerTable(storedPartners(trade, "cosmetics"))}</section><section class="panel"><div class="panel-head"><h2>반도체 상위 수출국</h2><span class="small">${esc(trade.asOf ? `${tradePeriod(trade.asOf)} · HS 8542 기준` : "첫 마감 수집 후 표시")}</span></div>${partnerTable(storedPartners(trade, "semiconductors"))}</section></section><section class="panel" style="margin-top:18px"><div class="panel-head"><h2>월별 수출액</h2><span class="small">${esc(trade.asOf ? `${tradePeriod(trade.asOf)} 기준` : "첫 마감 수집 후 표시")}</span></div>${rows ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>기준월</th>${categories.map((category) => `<th>${esc(category.name)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : empty("첫 마감 수집 후 최근 12개월 수출 통계가 표시됩니다.")}<div class="small macro-note">${esc(trade.note || "무료 UN Comtrade 공개 데이터를 사용합니다.")}${trade.error ? ` · ${esc(trade.error)}` : ""}</div></section>`);
-  };
   const stockHistoryTable = (history) => `<div class="table-wrap"><table class="data-table"><thead><tr><th>날짜</th><th>주가</th><th>외국인</th><th>연기금</th><th>기관</th></tr></thead><tbody>${history.map((item, index) => `<tr><td>${longDate(item.date)}${state.data.liveSnapshot?.date === item.date && index === 0 ? " <span class=\"pill\">잠정</span>" : ""}</td><td class="${signClass(item.dailyChangePct)}">${price(item.closePrice)} <small>${pct(item.dailyChangePct)}</small></td><td class="${signClass(item.foreignWon)}">${won(item.foreignWon)}</td><td class="${signClass(item.pensionWon)}">${won(item.pensionWon, "장중 미제공")}</td><td class="${signClass(item.institutionWon)}">${won(item.institutionWon)}</td></tr>`).join("")}</tbody></table></div>`;
   function renderFlowChart(history) {
     const canvas = document.querySelector("#flow-chart");
@@ -289,7 +247,7 @@
     } catch { /* last normal data remains */ }
     if (every && document.visibilityState === "visible") setTimeout(() => updateQuotes(codes, every), every);
   }
-  const render = () => ({ home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, trade: renderTrade, momentum: renderMomentum }[PAGE] || renderHome)();
+  const render = () => ({ home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, momentum: renderMomentum }[PAGE] || renderHome)();
   async function loadData() {
     try {
       const remote = await api(`/api/data?t=${Date.now()}`);
