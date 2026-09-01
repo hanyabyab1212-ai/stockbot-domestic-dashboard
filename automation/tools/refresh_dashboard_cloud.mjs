@@ -4,6 +4,7 @@ import { loadKrxMaster } from "../src/krxMaster.mjs";
 import { loadCloudState, mergeDashboard, syncCloudState, writeFallback } from "../src/cloudState.mjs";
 import { isValidCloseBatch } from "../src/domain.mjs";
 import { loadLocalEnv } from "../src/env.mjs";
+import { collectMacroSnapshot } from "../src/macroService.mjs";
 
 loadLocalEnv();
 const args = new Set(process.argv.slice(2));
@@ -53,7 +54,9 @@ if (mode === "close" && !isValidCloseBatch(result.rows)) throw new Error(`마감
 if (mode === "intraday" && result.rows.length < 1000) throw new Error(`장중 데이터가 1,000종목 미만(${result.rows.length})이라 저장하지 않습니다.`);
 
 const liveSnapshot = mode === "intraday" ? { date: collectionDate, updatedAt: new Date().toISOString(), mode: "intraday-estimate", rows: result.rows } : null;
-const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, marketRanks, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length } });
+log("무료 거시지표를 갱신합니다.");
+const macro = await collectMacroSnapshot({ bokApiKey: process.env.BOK_ECOS_API_KEY, eiaApiKey: process.env.EIA_API_KEY, previous: previous.macro });
+const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, marketRanks, macro, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length } });
 const synced = await syncCloudState(data);
 await writeFallback(data);
 log(`동기화 완료 · version ${synced.version} · ${result.rows.length}행`);

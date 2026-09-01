@@ -45,6 +45,8 @@ jobs:
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
           KIS_BASE_URL: https://openapi.koreainvestment.com:9443
           KRX_OPEN_API_KEY: ${{ secrets.KRX_OPEN_API_KEY }}
+          BOK_ECOS_API_KEY: ${{ secrets.BOK_ECOS_API_KEY }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
           DASHBOARD_SYNC_TOKEN: ${{ secrets.DASHBOARD_SYNC_TOKEN }}
           DASHBOARD_API_URL: ${{ secrets.DASHBOARD_API_URL }}
           PUBLIC_DASHBOARD_URL: ${{ secrets.PUBLIC_DASHBOARD_URL }}

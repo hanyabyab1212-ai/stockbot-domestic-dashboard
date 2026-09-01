@@ -39,8 +39,18 @@ repository의 `Settings` → `Secrets and variables` → `Actions` → `New repo
 | `DASHBOARD_API_URL` | `https://stockbot-domestic-api.hanyabyab1212.workers.dev` |
 | `PUBLIC_DASHBOARD_URL` | GitHub Pages 최종 URL |
 | `CLOUDFLARE_API_TOKEN` | Worker/R2 수정 권한만 가진 Cloudflare API token |
+| `BOK_ECOS_API_KEY` | 한국은행 ECOS Open API 인증키 (원/달러·한국 국고채 10년·FX 스왑 추정용) |
+| `EIA_API_KEY` | 미국 EIA Open Data API 키 (WTI 원유용) |
 
 `KRX_OPEN_API_KEY`는 KRX 키를 별도로 쓰게 될 때만 등록합니다.
+
+### 무료 거시지표 키 발급
+
+1. [한국은행 ECOS Open API](https://ecos.bok.or.kr/api/)에서 회원가입 후 인증키를 발급받아 `BOK_ECOS_API_KEY`로 저장합니다.
+2. [EIA Open Data](https://www.eia.gov/opendata/)에서 무료 API 키를 신청합니다. 키는 등록한 이메일로 오며, `EIA_API_KEY`라는 이름으로 저장합니다.
+3. 키 자체는 채팅·화면 캡처·코드 파일에 넣지 않습니다. GitHub Secrets에만 붙여넣습니다.
+
+수집 후 홈 화면에는 원/달러, 한국·미국 10년물, WTI 현물가와 USD/KRW 3개월 **금리차 추정 스왑포인트**가 표시됩니다. 스왑포인트는 CD 91일·미국 국채 3개월물로 계산한 참고치이며, 금융기관의 실제 호가가 아닙니다.
 
 ## 4. GitHub Pages
 

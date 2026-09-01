@@ -28,6 +28,35 @@
   const shortDate = (date) => date && String(date).length >= 8 ? `${Number(String(date).slice(4, 6))}/${Number(String(date).slice(6, 8))}` : "-";
   const longDate = (date) => date && String(date).length >= 8 ? `${String(date).slice(0, 4)}.${String(date).slice(4, 6)}.${String(date).slice(6, 8)}` : "-";
   const price = (value) => value == null ? "-" : `${Math.round(value).toLocaleString("ko-KR")}원`;
+  const macroPlaceholders = [
+    ["usd-krw", "원/달러", "USD/KRW", "krw", "한국은행 ECOS", "매매기준율"],
+    ["kr-gov-10y", "한국 국고채 10년", "KTB 10Y", "yield", "한국은행 ECOS", "일별 수익률"],
+    ["us-gov-10y", "미국 국채 10년", "UST 10Y", "yield", "U.S. Treasury", "일별 만기수익률"],
+    ["usd-krw-swap-3m", "USD/KRW 3개월 스왑", "3M implied", "swap", "금리차 추정", "실제 호가 아님"],
+    ["wti", "WTI 원유", "WTI Spot", "oil", "U.S. EIA", "현물 · 달러/배럴"]
+  ].map(([id, name, symbol, format, source, note]) => ({ id, name, symbol, format, source, note, price: null, status: "무료 API 키 등록 후 첫 수집" }));
+  const macroStored = () => Array.isArray(state.data.macro?.items) && state.data.macro.items.length ? state.data.macro.items : macroPlaceholders;
+  const macroDate = (value) => {
+    const raw = String(value ?? "");
+    if (/^\d{8}$/.test(raw)) return longDate(raw);
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10).replaceAll("-", ".");
+    return "연결 대기";
+  };
+  const macroValue = (item) => {
+    const value = number(item.price);
+    if (value == null) return "연결 대기";
+    if (item.format === "krw") return `${value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원`;
+    if (item.format === "yield") return `${value.toFixed(2)}%`;
+    if (item.format === "swap") return `${sign(value)}${Math.abs(value).toFixed(2)}원`;
+    if (item.format === "oil") return `$${value.toFixed(2)}`;
+    return value.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+  };
+  const macroChange = (item) => {
+    const value = number(item.change);
+    if (item.format === "yield" && value != null) return `${sign(value)}${Math.abs(value * 100).toFixed(1)}bp`;
+    return pct(item.changePct);
+  };
+  const macroCards = (items) => items.map((item) => `<article class="panel macro"><div class="panel-head"><div><h3>${esc(item.name)}</h3><div class="small">${esc(item.symbol || "-")}</div></div><span class="${signClass(item.change ?? item.changePct)}">${macroChange(item)}</span></div><div class="macro-value ${item.price == null ? "muted" : ""}">${macroValue(item)}</div><div class="small">${esc(item.source || "-")} · ${esc(item.asOf ? macroDate(item.asOf) : item.status || "연결 대기")}</div>${item.note ? `<div class="small macro-note">${esc(item.note)}</div>` : ""}</article>`).join("") || empty();
   const active = (condition) => condition ? " active" : "";
   const row = (raw) => Object.fromEntries(COLS.map((column, index) => [column, raw[index]]));
   const rows = () => {
@@ -85,6 +114,8 @@
     const names = [["pension-buy", "연기금 연속 순매수", "pension"], ["foreign-buy", "외국인 연속 순매수", "foreign"], ["both-buy", "연기금·외국인 동시 순매수", "both"], ["pension-sell", "연기금 연속 순매도", "pension"], ["foreign-sell", "외국인 연속 순매도", "foreign"], ["both-sell", "연기금·외국인 동시 순매도", "both"]];
     const accordions = names.filter(([key]) => !(state.data.liveSnapshot && key.startsWith("both"))).map(([key, name, actor], index) => `<details ${index === 0 ? "open" : ""}><summary><span>${name}</span><span class="pill">${groups.get(key).length}종목</span></summary><div class="accordion-body">${groups.get(key).length ? groups.get(key).slice(0, 30).map((item) => signalCard(item, actor)).join("") : empty("3거래일 이상의 조건 충족 종목이 없습니다.")}</div></details>`).join("");
     html("특이동향", "Flow Intelligence / 구구의 주식봇", state.data.liveSnapshot ? `장중 잠정(외국인·기관) ${shortDate(state.data.liveSnapshot.date)} · 연기금은 전일 마감 기준입니다.` : "마감 수급을 바탕으로 연속 순매수·순매도 흐름을 찾습니다.", `<div class="grid two"><section class="panel"><div class="panel-head"><h2>투자자동향</h2><span class="small">현물: 억원 · 선물·옵션: 계약</span></div><div id="investor-trends" class="trend-board">${empty("시장종합 데이터를 불러오는 중입니다.")}</div></section><section class="panel"><div class="panel-head"><h2>수집 상태</h2><span class="pill">${esc(state.data.automation?.mode || "대기")}</span></div><div class="metric"><div class="metric-label">마지막 갱신</div><div class="metric-value">${state.data.generatedAt ? new Date(state.data.generatedAt).toLocaleString("ko-KR") : "연결 대기"}</div></div><div class="metric"><div class="metric-label">유효 종목 수</div><div class="metric-value">${Number(state.data.automation?.records || 0).toLocaleString("ko-KR")}</div></div><div class="metric"><div class="metric-label">실패 종목 수</div><div class="metric-value">${Number(state.data.automation?.failed || 0).toLocaleString("ko-KR")}</div></div></section></div><section class="panel" style="margin-top:18px"><div class="panel-head"><h2>특이동향</h2><span class="small">연속일수 ↓ · 누적금액 절댓값 ↓</span></div><div class="accordion">${accordions}</div></section><section class="grid three" style="margin-top:18px" id="macro-board">${Array.from({ length: 6 }, () => `<article class="panel macro"><div class="small">시장 지표</div><div class="macro-value muted">연결 대기</div></article>`).join("")}</section>`);
+    const board = document.querySelector("#macro-board");
+    if (board) board.innerHTML = macroCards(macroStored());
     loadHomeDynamic();
   };
   async function loadHomeDynamic() {
@@ -97,7 +128,7 @@
       const result = await api("/api/markets");
       const board = document.querySelector("#macro-board");
       if (!board) return;
-      board.innerHTML = (result.macro || []).map((item) => `<article class="panel macro"><div class="panel-head"><div><h3>${esc(item.name)}</h3><div class="small">${esc(item.symbol)}</div></div><span class="${signClass(item.changePct)}">${pct(item.changePct)}</span></div><div class="macro-value">${item.price == null ? "연결 대기" : Number(item.price).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</div><div class="small">${esc(item.source || "-")} · ${item.asOf ? new Date(Number(item.asOf) * 1000 || item.asOf).toLocaleTimeString("ko-KR") : "연결 대기"}</div></article>`).join("") || empty();
+      board.innerHTML = macroCards([...macroStored(), ...(result.macro || [])]);
     } catch { /* individual cards stay available */ }
   }
   const stockHistoryTable = (history) => `<div class="table-wrap"><table class="data-table"><thead><tr><th>날짜</th><th>주가</th><th>외국인</th><th>연기금</th><th>기관</th></tr></thead><tbody>${history.map((item, index) => `<tr><td>${longDate(item.date)}${state.data.liveSnapshot?.date === item.date && index === 0 ? " <span class=\"pill\">잠정</span>" : ""}</td><td class="${signClass(item.dailyChangePct)}">${price(item.closePrice)} <small>${pct(item.dailyChangePct)}</small></td><td class="${signClass(item.foreignWon)}">${won(item.foreignWon)}</td><td class="${signClass(item.pensionWon)}">${won(item.pensionWon, "장중 미제공")}</td><td class="${signClass(item.institutionWon)}">${won(item.institutionWon)}</td></tr>`).join("")}</tbody></table></div>`;

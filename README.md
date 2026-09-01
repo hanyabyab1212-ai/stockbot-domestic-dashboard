@@ -21,7 +21,7 @@ python3 -m http.server 8080 --directory dashboard
 ## 보안
 
 - `.env`, Cloudflare secret, GitHub Actions secret에만 비밀값을 넣습니다.
-- `KIS_APP_KEY`, `KIS_APP_SECRET`, `DASHBOARD_SYNC_TOKEN`은 코드·HTML·Git 이력에 넣지 않습니다.
+- `KIS_APP_KEY`, `KIS_APP_SECRET`, `DASHBOARD_SYNC_TOKEN`, `BOK_ECOS_API_KEY`, `EIA_API_KEY`는 코드·HTML·Git 이력에 넣지 않습니다.
 - KIS는 데이터 수집기에만 사용하고 브라우저는 Worker API만 호출합니다.
 
 ## 배포 순서
