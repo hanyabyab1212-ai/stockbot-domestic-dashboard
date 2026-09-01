@@ -8,6 +8,7 @@ import { collectMacroSnapshot } from "../src/macroService.mjs";
 import { collectEtfRows } from "../src/etfService.mjs";
 import { markHighUpdateDate } from "../src/marketRankings.mjs";
 import { collectInvestorTrends } from "../src/investorTrendService.mjs";
+import { collectTradeSnapshot } from "../src/tradeService.mjs";
 
 loadLocalEnv();
 const args = new Set(process.argv.slice(2));
@@ -93,9 +94,19 @@ if (mode === "close") {
     log(`시장별 투자자동향 수집을 건너뜁니다: ${error.message}`);
   }
 }
+let trade = previous.trade || { categories: [] };
+if (mode === "close") {
+  log("무료 수출입 데이터를 갱신합니다.");
+  try {
+    trade = await collectTradeSnapshot({ previous: previous.trade });
+    if (trade.error) log(`수출입 데이터 일부 지연: ${trade.error}`);
+  } catch (error) {
+    log(`수출입 데이터 수집을 건너뜁니다: ${error.message}`);
+  }
+}
 log("무료 거시지표를 갱신합니다.");
 const macro = await collectMacroSnapshot({ bokApiKey: process.env.BOK_ECOS_API_KEY, eiaApiKey: process.env.EIA_API_KEY, previous: previous.macro });
-const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, investorTrends, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length } });
+const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, trade, investorTrends, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length } });
 const synced = await syncCloudState(data);
 await writeFallback(data);
 log(`동기화 완료 · version ${synced.version} · ${result.rows.length}행`);

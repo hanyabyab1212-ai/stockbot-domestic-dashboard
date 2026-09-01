@@ -8,8 +8,8 @@ export async function loadCloudState() {
   if (!response.ok) throw new Error(`기존 대시보드 데이터 조회 실패: ${response.status}`);
   return response.json();
 }
-export function mergeDashboard(previous, { closeRows = [], liveSnapshot = null, etfRows = [], marketRanks = {}, macro = null, investorTrends = null, automation = {} }) {
-  const next = { ...previous, columns: previous.columns?.length ? previous.columns : COLUMNS, rows: mergeRows(previous.rows || [], closeRows), etfRows: mergeEtfRows(previous.etfRows || [], etfRows), marketRanks: Object.keys(marketRanks).length ? marketRanks : previous.marketRanks || {}, macro: macro || previous.macro || { items: [] }, investorTrends: investorTrends || previous.investorTrends || { rows: [] }, liveSnapshot, automation: { ...previous.automation, ...automation } };
+export function mergeDashboard(previous, { closeRows = [], liveSnapshot = null, etfRows = [], marketRanks = {}, macro = null, trade = null, investorTrends = null, automation = {} }) {
+  const next = { ...previous, columns: previous.columns?.length ? previous.columns : COLUMNS, rows: mergeRows(previous.rows || [], closeRows), etfRows: mergeEtfRows(previous.etfRows || [], etfRows), marketRanks: Object.keys(marketRanks).length ? marketRanks : previous.marketRanks || {}, macro: macro || previous.macro || { items: [] }, trade: trade || previous.trade || { categories: [] }, investorTrends: investorTrends || previous.investorTrends || { rows: [] }, liveSnapshot, automation: { ...previous.automation, ...automation } };
   next.dates = [...new Set(next.rows.map((row) => row[0]))].sort();
   if (next.liveSnapshot?.date) next.dates = [...new Set([...next.dates, next.liveSnapshot.date])].sort();
   validateDashboard(next); return next;
