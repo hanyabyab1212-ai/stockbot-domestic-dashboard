@@ -3,6 +3,13 @@ import { asNumber, IDX, normalizeRow } from "./domain.mjs";
 const fromMillions = (value) => { const parsed = asNumber(value); return parsed == null ? null : parsed * 1_000_000; };
 const value = (object, ...keys) => { for (const key of keys) if (object?.[key] != null && object[key] !== "") return object[key]; return null; };
 const dateInKst = (date = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(date).replaceAll("-", "");
+const MARKET_CLOSE_DATA_MINUTE = 15 * 60 + 40;
+
+// 장 마감 직후에는 KIS 일별 투자자 수급이 아직 비어 있을 수 있다.
+// 마감 데이터가 안정적으로 제공되는 시점 전에는 직전 거래일을 사용한다.
+export function hasTodayCloseData({ isTodayOpen, minutes }) {
+  return Boolean(isTodayOpen) && minutes >= MARKET_CLOSE_DATA_MINUTE;
+}
 
 export function closeRow(payload, stock, date) {
   const output = payload.output2 || payload.output || [];

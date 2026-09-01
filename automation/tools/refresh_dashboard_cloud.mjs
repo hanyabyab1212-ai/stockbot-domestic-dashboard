@@ -1,5 +1,5 @@
 import { KisClient } from "../src/kisClient.mjs";
-import { collectCloseRows, collectIntradayRows, currentKstParts, isOpenDay } from "../src/flowService.mjs";
+import { collectCloseRows, collectIntradayRows, currentKstParts, hasTodayCloseData, isOpenDay } from "../src/flowService.mjs";
 import { loadKrxMaster, masterFromPreviousRows } from "../src/krxMaster.mjs";
 import { loadCloudState, mergeDashboard, syncCloudState, writeFallback } from "../src/cloudState.mjs";
 import { isValidCloseBatch } from "../src/domain.mjs";
@@ -37,8 +37,9 @@ await kis.getToken();
 const isTodayOpen = await isOpenDay(kis, kst.date);
 if (!force && !isTodayOpen) { log("휴장일이므로 수집을 건너뜁니다."); process.exit(0); }
 if (mode === "intraday" && !force && !inMarketHours) { log("장중 시간이 아니므로 장중 수집을 건너뜁니다."); process.exit(0); }
-const collectionDate = mode === "close" && !isTodayOpen ? await previousOpenDate(kis, kst.date) : kst.date;
-if (collectionDate !== kst.date) log(`휴장일 강제 수집: 최근 거래일 ${collectionDate} 데이터를 사용합니다.`);
+const todayCloseAvailable = hasTodayCloseData({ isTodayOpen, minutes: kst.minutes });
+const collectionDate = mode === "close" && !todayCloseAvailable ? await previousOpenDate(kis, kst.date) : kst.date;
+if (collectionDate !== kst.date) log(`오늘 마감 데이터가 아직 없거나 휴장일이므로 최근 거래일 ${collectionDate} 데이터를 사용합니다.`);
 
 log("KRX/TradingView 종목 마스터를 불러옵니다.");
 const previous = await loadCloudState();
