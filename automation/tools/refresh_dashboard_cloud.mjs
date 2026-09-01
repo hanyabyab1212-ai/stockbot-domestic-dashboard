@@ -5,6 +5,7 @@ import { loadCloudState, mergeDashboard, syncCloudState, writeFallback } from ".
 import { isValidCloseBatch } from "../src/domain.mjs";
 import { loadLocalEnv } from "../src/env.mjs";
 import { collectMacroSnapshot } from "../src/macroService.mjs";
+import { collectEtfRows } from "../src/etfService.mjs";
 
 loadLocalEnv();
 const args = new Set(process.argv.slice(2));
@@ -64,9 +65,22 @@ if (mode === "close" && !isValidCloseBatch(result.rows)) throw new Error(`마감
 if (mode === "intraday" && result.rows.length < 1000) throw new Error(`장중 데이터가 1,000종목 미만(${result.rows.length})이라 저장하지 않습니다.`);
 
 const liveSnapshot = mode === "intraday" ? { date: collectionDate, updatedAt: new Date().toISOString(), mode: "intraday-estimate", rows: result.rows } : null;
+let etfRows = [];
+if (mode === "close") {
+  log("무료 ETF 자금흐름 기준값을 수집합니다.");
+  try {
+    const etf = await collectEtfRows(kis, collectionDate, { onProgress: ({ completed, failed, total }) => {
+      if (completed + failed >= total || (completed + failed) % 100 === 0) log(`ETF 진행 ${completed + failed}/${total} · 성공 ${completed} · 실패 ${failed}`);
+    } });
+    etfRows = etf.rows;
+    if (etf.failed.length) log(`ETF 수집 실패 ${etf.failed.length}건 · 기존 데이터는 유지합니다.`);
+  } catch (error) {
+    log(`ETF 수집을 건너뜁니다: ${error.message}`);
+  }
+}
 log("무료 거시지표를 갱신합니다.");
 const macro = await collectMacroSnapshot({ bokApiKey: process.env.BOK_ECOS_API_KEY, eiaApiKey: process.env.EIA_API_KEY, previous: previous.macro });
-const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, marketRanks, macro, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length } });
+const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length } });
 const synced = await syncCloudState(data);
 await writeFallback(data);
 log(`동기화 완료 · version ${synced.version} · ${result.rows.length}행`);
