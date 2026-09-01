@@ -56,7 +56,24 @@
     if (item.format === "yield" && value != null) return `${sign(value)}${Math.abs(value * 100).toFixed(1)}bp`;
     return pct(item.changePct);
   };
-  const macroCards = (items) => items.map((item) => `<article class="panel macro"><div class="panel-head"><div><h3>${esc(item.name)}</h3><div class="small">${esc(item.symbol || "-")}</div></div><span class="${signClass(item.change ?? item.changePct)}">${macroChange(item)}</span></div><div class="macro-value ${item.price == null ? "muted" : ""}">${macroValue(item)}</div><div class="small">${esc(item.source || "-")} · ${esc(item.asOf ? macroDate(item.asOf) : item.status || "연결 대기")}</div>${item.note ? `<div class="small macro-note">${esc(item.note)}</div>` : ""}</article>`).join("") || empty();
+  const macroSources = (item) => {
+    const bok = ["https://ecos.bok.or.kr/", "한국은행 ECOS"];
+    const treasury = ["https://home.treasury.gov/resource-center/data-chart-center/interest-rates", "U.S. Treasury"];
+    const sources = {
+      "usd-krw": [bok], "kr-gov-10y": [bok], "us-gov-10y": [treasury],
+      "usd-krw-swap-3m": [bok, treasury],
+      wti: [["https://www.eia.gov/dnav/pet/hist/RWTCd.htm", "U.S. EIA"]]
+    };
+    if (sources[item.id]) return sources[item.id];
+    if (item.source === "Yahoo Finance" && item.symbol) return [[`https://finance.yahoo.com/quote/${encodeURIComponent(item.symbol)}`, "Yahoo Finance"]];
+    return [];
+  };
+  const macroSourceLinks = (item) => {
+    const sources = macroSources(item);
+    if (!sources.length) return esc(item.source || "출처 정보 없음");
+    return sources.map(([url, label]) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${esc(label)} <span aria-hidden="true">↗</span></a>`).join("<span class=\"macro-source-divider\">·</span>");
+  };
+  const macroCards = (items) => items.map((item) => `<article class="panel macro"><div class="panel-head"><div><h3>${esc(item.name)}</h3><div class="small">${esc(item.symbol || "-")}</div></div><span class="${signClass(item.change ?? item.changePct)}">${macroChange(item)}</span></div><div class="macro-value ${item.price == null ? "muted" : ""}">${macroValue(item)}</div><div class="small">기준일 · ${esc(item.asOf ? macroDate(item.asOf) : item.status || "연결 대기")}</div><div class="small macro-source">출처 · ${macroSourceLinks(item)}</div>${item.note ? `<div class="small macro-note">${esc(item.note)}</div>` : ""}</article>`).join("") || empty();
   const active = (condition) => condition ? " active" : "";
   const row = (raw) => Object.fromEntries(COLS.map((column, index) => [column, raw[index]]));
   const rows = () => {
