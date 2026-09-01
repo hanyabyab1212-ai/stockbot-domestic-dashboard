@@ -7,7 +7,7 @@
   const API = String(window.STOCKBOT_API_URL || "").replace(/\/$/, "");
   const state = { data: FALLBACK, selectedCode: "005930", days: 7, actor: "foreignWon", direction: "buy", etfCategory: "업종별", momentumMode: "high", market: "유가", period: "day", directionMove: "up" };
   const nav = [
-    ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["macro", "macro.html", "거시지표", "◎"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
+    ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
   ];
   const number = (value, fallback = null) => {
     const parsed = Number(value);
