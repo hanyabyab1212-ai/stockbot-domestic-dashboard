@@ -12,6 +12,7 @@ const EMPTY_DASHBOARD = {
   liveSnapshot: null,
   etfRows: [],
   marketRanks: {},
+  investorTrends: { rows: [] },
   automation: { source: "cloudflare-r2", mode: "uninitialized", records: 0, failed: 0 }
 };
 const DATA_KEY = "dashboard.json";
@@ -128,7 +129,8 @@ export default {
       }
       if (request.method === "GET" && path === "/api/markets") return json(request, env, await marketData());
       if (request.method === "GET" && path === "/api/investor-trends") {
-        return json(request, env, await readJson(env.DASHBOARD_BUCKET, "investor-trends.json", { updatedAt: null, source: "시장종합 제공처", rows: [], error: "연결 대기" }));
+        const dashboard = await readJson(env.DASHBOARD_BUCKET, DATA_KEY, EMPTY_DASHBOARD);
+        return json(request, env, dashboard.investorTrends || { updatedAt: null, source: "한국투자증권 Open API", rows: [], error: "다음 마감 수집 대기" });
       }
       if (request.method === "GET" && path === "/api/stock-quotes") {
         const codes = [...new Set((url.searchParams.get("codes") ?? "").split(",").map((code) => code.trim()).filter((code) => /^\d{6}$/.test(code)))];

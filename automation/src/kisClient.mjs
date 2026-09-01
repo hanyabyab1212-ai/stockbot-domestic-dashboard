@@ -64,6 +64,16 @@ export class KisClient {
     });
   }
   intradayInvestor(code) { return this.get("/uapi/domestic-stock/v1/quotations/investor-trend-estimate", "HHPTJ04160200", { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }); }
+  marketInvestorDaily(market, industryCode, date) {
+    return this.get("/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market", "FHPTJ04040000", {
+      FID_COND_MRKT_DIV_CODE: "U",
+      FID_INPUT_ISCD: industryCode,
+      FID_INPUT_DATE_1: date,
+      FID_INPUT_ISCD_1: market,
+      FID_INPUT_DATE_2: date,
+      FID_INPUT_ISCD_2: industryCode
+    });
+  }
   price(code) { return this.get("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100", { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }); }
   etfPrice(code) { return this.get("/uapi/etfetn/v1/quotations/inquire-price", "FHPST02400000", { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }); }
   holiday(date) { return this.get("/uapi/domestic-stock/v1/quotations/chk-holiday", "CTCA0903R", { BASS_DT: date, CTX_AREA_FK200: "", CTX_AREA_NK200: "" }); }
