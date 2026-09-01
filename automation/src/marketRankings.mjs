@@ -3,11 +3,48 @@ const columns = ["name", "description", "close", "change", "volume", "market_cap
 
 function codeOf(symbol = "") { const match = String(symbol).match(/(\d{6})$/); return match?.[1] || ""; }
 function value(data, index) { return Array.isArray(data) ? data[index] : null; }
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export async function loadTradingViewMarketRankings() {
-  const response = await fetch(SCANNER_URL, { method: "POST", headers: { "content-type": "application/json", origin: "https://www.tradingview.com" }, body: JSON.stringify({ filter: [{ left: "type", operation: "equal", right: "stock" }, { left: "active_symbol", operation: "equal", right: true }], options: { lang: "ko" }, range: [0, 5000], columns, sort: { sortBy: "market_cap_basic", sortOrder: "desc" } }) });
-  if (!response.ok) throw new Error(`TradingView scanner ${response.status}`);
-  const payload = await response.json(); const list = payload.data || [];
+function scannerRequest() {
+  return {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "https://www.tradingview.com" },
+    body: JSON.stringify({
+      filter: [{ left: "type", operation: "equal", right: "stock" }, { left: "active_symbol", operation: "equal", right: true }],
+      options: { lang: "ko" },
+      range: [0, 5000],
+      columns,
+      sort: { sortBy: "market_cap_basic", sortOrder: "desc" }
+    })
+  };
+}
+
+function retryable(error) {
+  return error?.retryable !== false;
+}
+
+export async function fetchTradingViewScanner({ fetchImpl = fetch, attempts = 3, waitImpl = wait } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(SCANNER_URL, scannerRequest());
+      if (!response.ok) {
+        const error = new Error(`TradingView scanner ${response.status}`);
+        error.retryable = response.status === 429 || response.status >= 500;
+        throw error;
+      }
+      return response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts || !retryable(error)) break;
+      await waitImpl(750 * attempt);
+    }
+  }
+  throw new Error(`TradingView 종목 마스터 요청 실패 (${attempts}회 재시도): ${lastError?.message || "알 수 없는 오류"}`, { cause: lastError });
+}
+
+export async function loadTradingViewMarketRankings(options = {}) {
+  const payload = await fetchTradingViewScanner(options); const list = payload.data || [];
   if (list.length < 1000) throw new Error(`TradingView scanner 비정상 응답: ${list.length}종목`);
   const stocks = list.map((entry) => {
     const data = entry.d || []; const exchange = String(value(data, 9) || ""); const market = /KOSDAQ/i.test(exchange) ? "코스닥" : "유가";

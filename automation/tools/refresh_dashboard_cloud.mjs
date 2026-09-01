@@ -1,6 +1,6 @@
 import { KisClient } from "../src/kisClient.mjs";
 import { collectCloseRows, collectIntradayRows, currentKstParts, isOpenDay } from "../src/flowService.mjs";
-import { loadKrxMaster } from "../src/krxMaster.mjs";
+import { loadKrxMaster, masterFromPreviousRows } from "../src/krxMaster.mjs";
 import { loadCloudState, mergeDashboard, syncCloudState, writeFallback } from "../src/cloudState.mjs";
 import { isValidCloseBatch } from "../src/domain.mjs";
 import { loadLocalEnv } from "../src/env.mjs";
@@ -41,7 +41,16 @@ const collectionDate = mode === "close" && !isTodayOpen ? await previousOpenDate
 if (collectionDate !== kst.date) log(`휴장일 강제 수집: 최근 거래일 ${collectionDate} 데이터를 사용합니다.`);
 
 log("KRX/TradingView 종목 마스터를 불러옵니다.");
-const [{ master, marketRanks }, previous] = await Promise.all([loadKrxMaster(), loadCloudState()]);
+const previous = await loadCloudState();
+let master;
+let marketRanks;
+try {
+  ({ master, marketRanks } = await loadKrxMaster());
+} catch (error) {
+  master = masterFromPreviousRows(previous.rows);
+  marketRanks = previous.marketRanks || {};
+  log(`TradingView 종목 마스터 조회 실패로 직전 정상 목록을 사용합니다: ${error.message}`);
+}
 if (master.length < 1000) throw new Error(`종목 마스터 검증 실패: ${master.length}개`);
 log(`${master.length}종목 수집을 ${mode} 모드로 시작합니다.`);
 let progressAt = 0;
