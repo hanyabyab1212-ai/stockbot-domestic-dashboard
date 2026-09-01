@@ -52,6 +52,12 @@ async function readJson<T>(bucket: R2Bucket, key: string, fallback: T): Promise<
   try { return await object.json<T>(); } catch { return fallback; }
 }
 
+function withoutTrade<T>(value: T): T {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const { trade: _trade, ...rest } = value as Record<string, unknown>;
+  return rest as T;
+}
+
 function validPayload(value: unknown): value is { dates: unknown[]; rows: unknown[]; etfRows?: unknown[] } {
   return Boolean(value && typeof value === "object" && Array.isArray((value as { dates?: unknown[] }).dates) && Array.isArray((value as { rows?: unknown[] }).rows));
 }
@@ -107,7 +113,7 @@ export default {
     const path = url.pathname.replace(/\/+$/, "") || "/";
     try {
       if (request.method === "GET" && path === "/api/data") {
-        return json(request, env, await readJson(env.DASHBOARD_BUCKET, DATA_KEY, EMPTY_DASHBOARD));
+        return json(request, env, withoutTrade(await readJson(env.DASHBOARD_BUCKET, DATA_KEY, EMPTY_DASHBOARD)));
       }
       if (request.method === "GET" && path === "/api/data-version") {
         return json(request, env, await readJson(env.DASHBOARD_BUCKET, VERSION_KEY, { version: 0 }));
@@ -121,7 +127,7 @@ export default {
         const payload: unknown = JSON.parse(raw);
         if (!validPayload(payload)) return json(request, env, { error: "dates and rows arrays are required" }, 400);
         const version = Date.now();
-        const dashboard = { ...(payload as Record<string, unknown>), generatedAt: new Date().toISOString() };
+        const dashboard = { ...(withoutTrade(payload) as Record<string, unknown>), generatedAt: new Date().toISOString() };
         await env.DASHBOARD_BUCKET.put(`${DATA_KEY}.staging`, JSON.stringify(dashboard), { httpMetadata: { contentType: "application/json" } });
         await env.DASHBOARD_BUCKET.put(DATA_KEY, JSON.stringify(dashboard), { httpMetadata: { contentType: "application/json" } });
         await env.DASHBOARD_BUCKET.put(VERSION_KEY, JSON.stringify({ version }), { httpMetadata: { contentType: "application/json" } });
