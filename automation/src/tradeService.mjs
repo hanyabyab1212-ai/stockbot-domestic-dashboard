@@ -138,6 +138,19 @@ function topPartners(rows, total) {
   return [...merged.values()].sort((a, b) => b.value - a.value).slice(0, 10).map((partner) => ({ ...partner, sharePct: total ? partner.value / total * 100 : null }));
 }
 
+async function collectPartners(period, product, total, { fetchImpl, retries, retryDelayMs, pauseForPublicApi, errors }) {
+  const rows = [];
+  for (const hsCode of product?.hsCodes || []) {
+    await pauseForPublicApi();
+    try {
+      rows.push(...await fetchPartnerMonth(period, hsCode, { fetchImpl, retries, retryDelayMs }));
+    } catch (error) {
+      errors.push(`${product.name} 국가별 ${hsCode}: ${error.message}`);
+    }
+  }
+  return topPartners(rows, total);
+}
+
 /**
  * Monthly Korean exports, sourced from UN Comtrade's free public preview API.
  * Calls are intentionally sequential: the free endpoint is rate-limited.
@@ -171,19 +184,16 @@ export async function collectTradeSnapshot({ previous = {}, fetchImpl = fetch, n
   if (!categories.some((category) => category.rows.length)) throw new Error(errors[0] || "UN Comtrade에서 수출 데이터를 찾지 못했습니다.");
   const asOf = categories.flatMap((category) => category.rows.map((row) => row.period)).sort().at(-1) || null;
   const cosmetics = categories.find((category) => category.id === "cosmetics");
+  const semiconductors = categories.find((category) => category.id === "semiconductors");
   const cosmeticsValue = cosmetics?.rows.find((row) => row.period === asOf)?.value;
-  const partnerRows = [];
+  const semiconductorsValue = semiconductors?.rows.find((row) => row.period === asOf)?.value;
+  const oldTopPartners = Array.isArray(previous.topPartners) ? { cosmetics: previous.topPartners, semiconductors: [] } : previous.topPartners || {};
+  let cosmeticsPartners = [];
+  let semiconductorsPartners = [];
   if (asOf) {
-    for (const hsCode of cosmetics?.hsCodes || []) {
-      await pauseForPublicApi();
-      try {
-        partnerRows.push(...await fetchPartnerMonth(asOf, hsCode, { fetchImpl, retries, retryDelayMs }));
-      } catch (error) {
-        errors.push(`화장품 국가별 ${hsCode}: ${error.message}`);
-      }
-    }
+    cosmeticsPartners = await collectPartners(asOf, cosmetics, cosmeticsValue, { fetchImpl, retries, retryDelayMs, pauseForPublicApi, errors });
+    semiconductorsPartners = await collectPartners(asOf, semiconductors, semiconductorsValue, { fetchImpl, retries, retryDelayMs, pauseForPublicApi, errors });
   }
-  const partners = topPartners(partnerRows, cosmeticsValue);
   return {
     updatedAt: new Date().toISOString(),
     checkedAt: now.toISOString(),
@@ -192,7 +202,10 @@ export async function collectTradeSnapshot({ previous = {}, fetchImpl = fetch, n
     sourceUrl: "https://comtradeplus.un.org/TradeFlow",
     note: "한국의 전세계 대상 월간 수출액(USD) · 반도체 HS 8542 · 화장품 HS 3303–3307",
     categories,
-    topPartners: partners.length ? partners : previous.topPartners || [],
+    topPartners: {
+      cosmetics: cosmeticsPartners.length ? cosmeticsPartners : oldTopPartners.cosmetics || [],
+      semiconductors: semiconductorsPartners.length ? semiconductorsPartners : oldTopPartners.semiconductors || []
+    },
     error: errors.length ? `일부 월의 공개 API 조회가 지연되었습니다. (${errors.length}건)` : undefined
   };
 }

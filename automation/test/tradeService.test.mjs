@@ -38,5 +38,6 @@ test("trade snapshot saves category series and aggregates top cosmetics destinat
   assert.equal(snapshot.categories[1].rows.at(-1).value, 42);
   assert.equal(snapshot.categories[2].name, "색조 화장품");
   assert.equal(snapshot.categories[3].name, "기초 화장품");
-  assert.deepEqual(snapshot.topPartners.map((partner) => partner.name), ["China", "USA"]);
+  assert.deepEqual(snapshot.topPartners.cosmetics.map((partner) => partner.name), ["China", "USA"]);
+  assert.deepEqual(snapshot.topPartners.semiconductors.map((partner) => partner.name), ["China", "USA"]);
 });
