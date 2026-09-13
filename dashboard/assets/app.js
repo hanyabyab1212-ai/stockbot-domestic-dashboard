@@ -5,9 +5,10 @@
   const COLS = FALLBACK.columns || [];
   const I = Object.fromEntries(COLS.map((name, index) => [name, index]));
   const API = String(window.STOCKBOT_API_URL || "").replace(/\/$/, "");
-  const state = { data: FALLBACK, selectedCode: "005930", days: 7, actor: "foreignWon", direction: "buy", etfCategory: "업종별", momentumMode: "high", market: "유가", period: "day", directionMove: "up" };
+  const selectedCodeFromUrl = new URLSearchParams(location.search).get("code");
+  const state = { data: FALLBACK, selectedCode: /^\d{6}$/.test(selectedCodeFromUrl || "") ? selectedCodeFromUrl : "005930", days: 7, actor: "foreignWon", direction: "buy", etfCategory: "업종별", momentumMode: "high", market: "유가", period: "day", directionMove: "up", marketIndex: "kospi", marketData: null };
   const nav = [
-    ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
+    ["market", "market.html", "오늘의 시장", "◉"], ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
   ];
   const number = (value, fallback = null) => {
     const parsed = Number(value);
@@ -156,6 +157,83 @@
       if (board) board.innerHTML = macroCards([...macroStored(), ...(result.macro || [])]);
     } catch { /* 저장된 거시지표 카드를 유지한다 */ }
   }
+  const marketIndexSpecs = [
+    { id: "kospi", name: "KOSPI", symbol: "^KS11", description: "코스피 종합주가지수" },
+    { id: "kosdaq", name: "KOSDAQ", symbol: "^KQ11", description: "코스닥 종합주가지수" }
+  ];
+  const sectorLabels = {
+    "Electronic Technology": "IT·반도체", "Producer Manufacturing": "산업재", "Process Industries": "소재·화학", "Health Technology": "바이오·헬스케어",
+    "Technology Services": "IT서비스", "Consumer Non-Durables": "필수소비재", "Consumer Durables": "경기소비재", Finance: "금융",
+    "Non-Energy Minerals": "철강·소재", "Energy Minerals": "에너지", "Distribution Services": "유통", "Commercial Services": "상업서비스",
+    "Consumer Services": "소비자서비스", "Industrial Services": "산업서비스", Communications: "통신", Utilities: "유틸리티"
+  };
+  const friendlySector = (sector) => sectorLabels[sector] || sector || "기타";
+  const marketIndexData = (id) => {
+    const spec = marketIndexSpecs.find((item) => item.id === id) || marketIndexSpecs[0];
+    return (state.marketData?.indices || []).find((item) => item.id === spec.id) || { ...spec, price: null, change: null, changePct: null, series: [] };
+  };
+  const marketPrice = (value) => value == null || !Number.isFinite(Number(value)) ? "연결 대기" : Number(value).toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const marketRows = () => [...latest(rows()).values()].filter((item) => number(item.dailyChangePct) != null);
+  const marketSummary = () => {
+    const current = marketRows(), sectors = new Map();
+    for (const item of current) {
+      const key = friendlySector(item.sector);
+      if (!sectors.has(key)) sectors.set(key, { name: key, count: 0, sum: 0, up: 0, down: 0 });
+      const group = sectors.get(key), change = number(item.dailyChangePct, 0);
+      group.count += 1; group.sum += change; if (change > 0) group.up += 1; if (change < 0) group.down += 1;
+    }
+    const sectorList = [...sectors.values()].filter((item) => item.count >= 5).map((item) => ({ ...item, change: item.sum / item.count })).sort((a, b) => b.change - a.change);
+    const advance = current.filter((item) => number(item.dailyChangePct, 0) > 0).length;
+    const decline = current.filter((item) => number(item.dailyChangePct, 0) < 0).length;
+    const flat = current.length - advance - decline;
+    const signals = [...current].filter((item) => number(item.marketCapWon, 0) >= 1e11).sort((a, b) => Math.abs(number(b.dailyChangePct, 0)) - Math.abs(number(a.dailyChangePct, 0))).slice(0, 6);
+    return { current, sectors: sectorList.slice(0, 8), allSectors: sectorList, advance, decline, flat, signals };
+  };
+  const marketInvestorFlow = () => (state.data.investorTrends?.rows || []).reduce((sum, item) => sum + number(item.foreign, 0), 0);
+  const marketIndexCard = (item) => `<article class="market-kpi"><div class="market-kpi-head"><span>${esc(item.name)}</span><span class="${signClass(item.changePct)}">${pct(item.changePct)}</span></div><strong>${marketPrice(item.price)}</strong><div class="small">${esc(item.description || "실시간 지수")}</div></article>`;
+  const marketBreadth = ({ advance, decline, flat }) => {
+    const total = Math.max(1, advance + decline + flat), upWidth = advance / total * 100, downWidth = decline / total * 100, flatWidth = flat / total * 100;
+    return `<section class="panel market-breadth"><div class="panel-head"><div><h2>시장 폭</h2><div class="small">최신 마감 종목 기준</div></div><span class="small">상승 ${advance.toLocaleString("ko-KR")} · 하락 ${decline.toLocaleString("ko-KR")}</span></div><div class="breadth-bar"><i class="breadth-up" style="width:${upWidth}%"></i><i class="breadth-flat" style="width:${flatWidth}%"></i><i class="breadth-down" style="width:${downWidth}%"></i></div><div class="breadth-labels"><span class="positive">상승 ${advance.toLocaleString("ko-KR")}</span><span>보합 ${flat.toLocaleString("ko-KR")}</span><span class="negative">하락 ${decline.toLocaleString("ko-KR")}</span></div></section>`;
+  };
+  const marketSectorTiles = (sectors) => `<section class="panel"><div class="panel-head"><div><h2>업종 온도</h2><div class="small">업종별 평균 등락률 · 종목 수 5개 이상</div></div><span class="small">최신 마감 기준</span></div><div class="sector-tiles">${sectors.length ? sectors.map((item) => `<article class="sector-tile ${item.change > 0 ? "warm" : item.change < 0 ? "cool" : "neutral"}"><div class="small">${esc(item.name)} · ${item.count}종목</div><strong class="${signClass(item.change)}">${pct(item.change)}</strong><div class="small">상승 ${item.up} · 하락 ${item.down}</div></article>`).join("") : empty("업종별 등락률 데이터를 계산하는 중입니다.")}</div></section>`;
+  const marketSignals = (signals) => `<section class="panel"><div class="panel-head"><div><h2>오늘의 변동 시그널</h2><div class="small">시가총액 1,000억 원 이상 · 절대 등락률 순</div></div><a class="text-link" href="momentum.html">전체 보기 ↗</a></div>${signals.length ? `<div class="market-signals">${signals.map((item) => `<a class="market-signal" href="stocks.html?code=${encodeURIComponent(item.code)}"><div><strong>${esc(item.name)}</strong><span>${esc(item.code)} · ${esc(friendlySector(item.sector))}</span></div><div><strong class="${signClass(item.dailyChangePct)}">${pct(item.dailyChangePct)}</strong><span>거래량 ${number(item.tradingVolume, 0).toLocaleString("ko-KR")}</span></div></a>`).join("")}</div>` : empty("오늘의 변동 종목을 불러오는 중입니다.")}</section>`;
+  const marketBrief = (summary) => {
+    const strongest = summary.allSectors[0], weakest = summary.allSectors.at(-1), foreign = marketInvestorFlow(), kospi = marketIndexData("kospi"), kosdaq = marketIndexData("kosdaq");
+    const indexLine = [kospi, kosdaq].filter((item) => item.price != null).map((item) => `${item.name} ${pct(item.changePct)}`).join(" · ") || "장중 지수 연결 대기";
+    return `<aside class="panel market-brief"><div class="eyebrow">Data Briefing</div><h2>오늘의 시장 요약</h2><p>${esc(indexLine)}</p><div class="brief-row"><span>외국인 수급</span><strong class="${signClass(foreign)}">${won(foreign)}</strong></div><div class="brief-row"><span>강한 업종</span><strong class="${signClass(strongest?.change)}">${esc(strongest ? `${strongest.name} ${pct(strongest.change)}` : "집계 중")}</strong></div><div class="brief-row"><span>약한 업종</span><strong class="${signClass(weakest?.change)}">${esc(weakest ? `${weakest.name} ${pct(weakest.change)}` : "집계 중")}</strong></div><p class="small">지수는 Yahoo Finance의 장중 5분 데이터, 업종과 수급은 마지막 정상 마감 수집 데이터 기준입니다. 투자 판단의 근거로만 사용하지 마세요.</p></aside>`;
+  };
+  function drawMarketIndexChart(index) {
+    const canvas = document.querySelector("#market-index-chart"), series = (index.series || []).filter((item) => Number.isFinite(Number(item.value)));
+    if (!canvas || series.length < 2) return;
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect(), ratio = window.devicePixelRatio || 1, width = Math.max(1, rect.width), height = Math.max(1, rect.height);
+      canvas.width = width * ratio; canvas.height = height * ratio;
+      const ctx = canvas.getContext("2d"); ctx.scale(ratio, ratio); ctx.clearRect(0, 0, width, height);
+      const pad = { left: 48, right: 14, top: 18, bottom: 30 }, values = series.map((item) => Number(item.value));
+      const min = Math.min(...values), max = Math.max(...values), range = Math.max(.01, max - min), chartHeight = height - pad.top - pad.bottom, chartWidth = width - pad.left - pad.right;
+      ctx.strokeStyle = "rgba(148,163,184,.18)"; ctx.fillStyle = "#8d99ae"; ctx.font = "11px sans-serif";
+      for (let step = 0; step <= 3; step += 1) { const y = pad.top + chartHeight * step / 3, value = max - range * step / 3; ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(width - pad.right, y); ctx.stroke(); ctx.fillText(value.toLocaleString("ko-KR", { maximumFractionDigits: 1 }), 2, y + 4); }
+      const color = number(index.changePct, 0) >= 0 ? "#ff6673" : "#5b9cff";
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.beginPath();
+      series.forEach((item, position) => { const x = pad.left + position / (series.length - 1) * chartWidth, y = pad.top + (max - Number(item.value)) / range * chartHeight; position ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+      const label = (item) => { const date = new Date(Number(item.time) * 1000); return Number.isNaN(date.valueOf()) ? "" : date.toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }); };
+      ctx.fillStyle = "#8d99ae"; ctx.fillText(label(series[0]), pad.left, height - 8); const last = label(series.at(-1)); ctx.fillText(last, width - pad.right - ctx.measureText(last).width, height - 8);
+    };
+    new ResizeObserver(draw).observe(canvas.parentElement); draw();
+  }
+  const renderMarket = ({ refresh = true } = {}) => {
+    const summary = marketSummary(), index = marketIndexData(state.marketIndex), usd = macroStored().find((item) => item.id === "usd-krw"), foreign = marketInvestorFlow();
+    const flowValue = foreign === 0 ? "집계 중" : won(foreign);
+    const chart = (index.series || []).filter((item) => Number.isFinite(Number(item.value))).length > 1 ? `<canvas id="market-index-chart" aria-label="${esc(index.name)} 장중 흐름 차트"></canvas>` : empty("장중 지수 차트는 무료 시세 API가 연결되면 표시됩니다.");
+    html("오늘의 시장", "Korea Equity / Market Desk", "지수·환율·수급·업종의 변화를 한 화면에서 확인합니다. 장중 지수는 무료 시세 데이터로 갱신되며, 업종과 수급은 마지막 정상 마감 데이터를 사용합니다.", `<section class="market-kpi-grid">${marketIndexSpecs.map((spec) => marketIndexCard(marketIndexData(spec.id))).join("")}<article class="market-kpi"><div class="market-kpi-head"><span>원/달러</span><span class="${signClass(usd?.changePct)}">${macroChange(usd || {})}</span></div><strong>${usd ? macroValue(usd) : "연결 대기"}</strong><div class="small">한국은행 ECOS · 매매기준율</div></article><article class="market-kpi"><div class="market-kpi-head"><span>외국인 순매수</span><span class="${signClass(foreign)}">${foreign > 0 ? "순매수" : foreign < 0 ? "순매도" : "집계 중"}</span></div><strong class="${signClass(foreign)}">${flowValue}</strong><div class="small">코스피·코스닥 합계 · 억원</div></article></section><section class="market-main-grid"><div class="market-stack"><section class="panel"><div class="panel-head"><div><h2>시장 흐름</h2><div class="small">무료 시세 API · 장중 5분 단위</div></div>${tabs(marketIndexSpecs.map((item) => [item.id, item.name]), state.marketIndex, "marketIndex")}</div><div class="market-index-value"><strong>${marketPrice(index.price)}</strong><span class="${signClass(index.changePct)}">${pct(index.changePct)}</span><span>${esc(index.description || "국내 주가지수")}</span></div><div class="chart-wrap market-chart-wrap">${chart}</div></section>${marketBreadth(summary)}${marketSectorTiles(summary.sectors)}${marketSignals(summary.signals)}</div><div class="market-side">${marketBrief(summary)}<section class="panel"><div class="panel-head"><div><h2>데이터 기준</h2><div class="small">수집 상태와 출처</div></div></div><div class="metric"><div class="metric-label">마지막 정상 마감</div><div class="metric-value">${state.data.automation?.updatedDate ? longDate(state.data.automation.updatedDate) : "연결 대기"}</div></div><div class="metric"><div class="metric-label">수집 종목</div><div class="metric-value">${Number(state.data.automation?.records || 0).toLocaleString("ko-KR")}개</div></div><div class="metric"><div class="metric-label">지수 출처</div><div class="metric-value"><a class="text-link" href="https://finance.yahoo.com/quote/${encodeURIComponent(index.symbol || "^KS11")}" target="_blank" rel="noopener noreferrer">Yahoo Finance ↗</a></div></div></section></div></section>`);
+    attachTabs(); drawMarketIndexChart(index); if (refresh) loadMarketDynamic();
+  };
+  async function loadMarketDynamic() {
+    try {
+      state.marketData = await api("/api/markets");
+      if (PAGE === "market") renderMarket({ refresh: false });
+    } catch { /* 마지막 마감 데이터와 연결 대기 상태를 유지한다 */ }
+  }
   const stockHistoryTable = (history) => `<div class="table-wrap"><table class="data-table"><thead><tr><th>날짜</th><th>주가</th><th>외국인</th><th>연기금</th><th>기관</th></tr></thead><tbody>${history.map((item, index) => `<tr><td>${longDate(item.date)}${state.data.liveSnapshot?.date === item.date && index === 0 ? " <span class=\"pill\">잠정</span>" : ""}</td><td class="${signClass(item.dailyChangePct)}">${price(item.closePrice)} <small>${pct(item.dailyChangePct)}</small></td><td class="${signClass(item.foreignWon)}">${won(item.foreignWon)}</td><td class="${signClass(item.pensionWon)}">${won(item.pensionWon, "장중 미제공")}</td><td class="${signClass(item.institutionWon)}">${won(item.institutionWon)}</td></tr>`).join("")}</tbody></table></div>`;
   function renderFlowChart(history) {
     const canvas = document.querySelector("#flow-chart");
@@ -247,7 +325,7 @@
     } catch { /* last normal data remains */ }
     if (every && document.visibilityState === "visible") setTimeout(() => updateQuotes(codes, every), every);
   }
-  const render = () => ({ home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, momentum: renderMomentum }[PAGE] || renderHome)();
+  const render = () => ({ market: renderMarket, home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, momentum: renderMomentum }[PAGE] || renderHome)();
   async function loadData() {
     try {
       const remote = await api(`/api/data?t=${Date.now()}`);
@@ -264,4 +342,5 @@
   render(); loadData(); checkVersion(); setInterval(checkVersion, 15000);
   if (PAGE === "home") setInterval(loadHomeDynamic, 60000);
   if (PAGE === "macro") setInterval(loadMacroDynamic, 60000);
+  if (PAGE === "market") setInterval(loadMarketDynamic, 60000);
 })();

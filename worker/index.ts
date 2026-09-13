@@ -86,6 +86,32 @@ async function naverQuote(code: string) {
   return compactQuote(await response.json<Record<string, unknown>>(), code);
 }
 
+async function koreanIndex(id: string, name: string, symbol: string, description: string) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
+    const response = await fetch(url, { cf: { cacheTtl: 60, cacheEverything: true } });
+    if (!response.ok) throw new Error(`yahoo index ${response.status}`);
+    const payload = await response.json() as {
+      chart?: { result?: Array<{ meta?: Record<string, unknown>; timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }> };
+    };
+    const result = payload.chart?.result?.[0];
+    const meta = result?.meta ?? {};
+    const timestamps = result?.timestamp ?? [];
+    const closes = result?.indicators?.quote?.[0]?.close ?? [];
+    const series = timestamps.flatMap((time, index) => {
+      const value = numberOf(closes[index]);
+      return value == null ? [] : [{ time, value }];
+    });
+    const last = series.at(-1)?.value ?? null;
+    const price = numberOf(meta.regularMarketPrice) ?? last;
+    const previous = numberOf(meta.regularMarketPreviousClose ?? meta.chartPreviousClose ?? meta.previousClose);
+    const change = price != null && previous != null ? price - previous : null;
+    return { id, name, symbol, description, price, change, changePct: change != null && previous ? change / previous * 100 : null, asOf: numberOf(meta.regularMarketTime) ?? timestamps.at(-1) ?? null, source: "Yahoo Finance", series };
+  } catch {
+    return { id, name, symbol, description, price: null, change: null, changePct: null, asOf: null, source: "Yahoo Finance", series: [], error: "연결 대기" };
+  }
+}
+
 async function marketData() {
   const symbols = [
     ["달러인덱스", "DX-Y.NYB"], ["VIX", "^VIX"], ["나스닥 선물", "NQ=F"]
@@ -103,7 +129,11 @@ async function marketData() {
       return { name, symbol, price: null, change: null, changePct: null, source: "Yahoo Finance", asOf: null, error: "연결 대기" };
     }
   }));
-  return { updatedAt: new Date().toISOString(), macro };
+  const indices = await Promise.all([
+    koreanIndex("kospi", "KOSPI", "^KS11", "코스피 종합주가지수"),
+    koreanIndex("kosdaq", "KOSDAQ", "^KQ11", "코스닥 종합주가지수")
+  ]);
+  return { updatedAt: new Date().toISOString(), macro, indices };
 }
 
 export default {
