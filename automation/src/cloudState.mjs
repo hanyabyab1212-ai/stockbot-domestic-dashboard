@@ -8,9 +8,9 @@ export async function loadCloudState() {
   if (!response.ok) throw new Error(`기존 대시보드 데이터 조회 실패: ${response.status}`);
   return response.json();
 }
-export function mergeDashboard(previous, { closeRows = [], liveSnapshot = null, etfRows = [], marketRanks = {}, macro = null, investorTrends = null, research = null, automation = {} }) {
+export function mergeDashboard(previous, { closeRows = [], liveSnapshot = null, etfRows = [], marketRanks = {}, macro = null, investorTrends = null, research = null, industryBriefing = null, automation = {} }) {
   const { trade: _trade, ...withoutTrade } = previous;
-  const next = { ...withoutTrade, columns: previous.columns?.length ? previous.columns : COLUMNS, rows: mergeRows(previous.rows || [], closeRows), etfRows: mergeEtfRows(previous.etfRows || [], etfRows), marketRanks: Object.keys(marketRanks).length ? marketRanks : previous.marketRanks || {}, macro: macro || previous.macro || { items: [] }, investorTrends: investorTrends || previous.investorTrends || { rows: [] }, research: research || previous.research || { company: [], macro: [] }, liveSnapshot, automation: { ...previous.automation, ...automation } };
+  const next = { ...withoutTrade, columns: previous.columns?.length ? previous.columns : COLUMNS, rows: mergeRows(previous.rows || [], closeRows), etfRows: mergeEtfRows(previous.etfRows || [], etfRows), marketRanks: Object.keys(marketRanks).length ? marketRanks : previous.marketRanks || {}, macro: macro || previous.macro || { items: [] }, investorTrends: investorTrends || previous.investorTrends || { rows: [] }, research: research || previous.research || { company: [], macro: [] }, industryBriefing: industryBriefing || previous.industryBriefing || { items: [] }, liveSnapshot, automation: { ...previous.automation, ...automation } };
   next.dates = [...new Set(next.rows.map((row) => row[0]))].sort();
   if (next.liveSnapshot?.date) next.dates = [...new Set([...next.dates, next.liveSnapshot.date])].sort();
   validateDashboard(next); return next;

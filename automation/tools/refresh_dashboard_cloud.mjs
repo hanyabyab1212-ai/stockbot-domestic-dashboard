@@ -9,6 +9,7 @@ import { collectEtfRows } from "../src/etfService.mjs";
 import { markHighUpdateDate } from "../src/marketRankings.mjs";
 import { collectInvestorTrends } from "../src/investorTrendService.mjs";
 import { collectResearchBriefing } from "../src/researchService.mjs";
+import { collectBokIndustryBriefing } from "../src/bokIndustryService.mjs";
 
 loadLocalEnv();
 const args = new Set(process.argv.slice(2));
@@ -29,12 +30,13 @@ const previousDate = (compactDate) => {
 const previous = await loadCloudState();
 const previousStockNames = Object.fromEntries((previous.rows || []).map((row) => [row[1], row[2]]));
 if (requestedMode === "reports") {
-  log("네이버 증권 공개 리포트 브리핑을 갱신합니다.");
+  log("네이버 증권 공개 리포트와 한국은행 산업 브리핑을 갱신합니다.");
   const research = await collectResearchBriefing({ referenceDate: kst.date, previous: previous.research, stockNames: previousStockNames });
-  const data = mergeDashboard(previous, { liveSnapshot: previous.liveSnapshot || null, research, automation: { source: "github-actions", reportUpdatedDate: kst.date } });
+  const industryBriefing = await collectBokIndustryBriefing({ previous: previous.industryBriefing });
+  const data = mergeDashboard(previous, { liveSnapshot: previous.liveSnapshot || null, research, industryBriefing, automation: { source: "github-actions", reportUpdatedDate: kst.date, industryBriefingUpdatedAt: industryBriefing.updatedAt } });
   const synced = await syncCloudState(data);
   await writeFallback(data);
-  log(`리포트 브리핑 동기화 완료 · version ${synced.version} · 기업 ${research.company.length}건 · 산업·거시 ${research.macro.length}건`);
+  log(`리포트 브리핑 동기화 완료 · version ${synced.version} · 기업 ${research.company.length}건 · 산업·거시 ${research.macro.length}건 · 한국은행 ${industryBriefing.items.length}건`);
   process.exit(0);
 }
 
@@ -110,7 +112,9 @@ const macro = await collectMacroSnapshot({ bokApiKey: process.env.BOK_ECOS_API_K
 log("네이버 증권 공개 리포트 브리핑을 갱신합니다.");
 const stockNames = { ...previousStockNames, ...Object.fromEntries(master.map((item) => [item.code, item.name])) };
 const research = await collectResearchBriefing({ referenceDate: collectionDate, previous: previous.research, stockNames });
-const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, investorTrends, research, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length, reportUpdatedDate: kst.date } });
+log("한국은행 공개 산업 자료를 갱신합니다.");
+const industryBriefing = await collectBokIndustryBriefing({ previous: previous.industryBriefing });
+const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, investorTrends, research, industryBriefing, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length, reportUpdatedDate: kst.date, industryBriefingUpdatedAt: industryBriefing.updatedAt } });
 const synced = await syncCloudState(data);
 await writeFallback(data);
 log(`동기화 완료 · version ${synced.version} · ${result.rows.length}행`);

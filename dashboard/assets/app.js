@@ -8,7 +8,7 @@
   const selectedCodeFromUrl = new URLSearchParams(location.search).get("code");
   const state = { data: FALLBACK, selectedCode: /^\d{6}$/.test(selectedCodeFromUrl || "") ? selectedCodeFromUrl : "005930", days: 7, actor: "foreignWon", direction: "buy", etfCategory: "업종별", momentumMode: "high", market: "유가", period: "day", directionMove: "up", marketIndex: "kospi", marketData: null };
   const nav = [
-    ["market", "market.html", "오늘의 시장", "◉"], ["reports", "reports.html", "리포트 브리핑", "▤"], ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
+    ["market", "market.html", "오늘의 시장", "◉"], ["reports", "reports.html", "리포트 브리핑", "▤"], ["industry", "industry.html", "산업 브리핑", "▥"], ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
   ];
   const number = (value, fallback = null) => {
     const parsed = Number(value);
@@ -262,6 +262,16 @@
     const macroNote = research.macroUsesLatest ? "당일 업로드가 없어 가장 최근 공개 리포트를 표시합니다." : "당일 공개된 리포트를 우선 표시합니다.";
     html("리포트 브리핑", "Daily Research Brief", "네이버 증권 첫 화면의 오늘 많이 본 기업 리서치를 그대로 보여주고, 산업·거시 리포트는 핵심 문장을 짧게 확인합니다. 모든 항목은 원문으로 연결됩니다.", `<section class="report-status"><div><strong>기준일 ${researchDate(research.referenceDate)}</strong><span>자동 발췌 요약 · 원문 링크 제공</span></div><a class="text-link" href="${esc(naverUrl)}" target="_blank" rel="noopener noreferrer">네이버 증권 리서치 전체 보기 ↗</a></section><section class="report-layout"><div class="report-main"><section class="panel report-section report-ranking-panel"><div class="panel-head"><div><h2>오늘 많이 본 기업 리서치</h2><div class="small">네이버 증권 · 최근 7일 조회수 순위</div></div><span class="small">${esc(companyNote)}</span></div>${compactReportList(company, "기업 리포트를 갱신 중입니다. 리포트 수집 모드를 한 번 실행해 주세요.")}</section><section class="panel report-section"><div class="panel-head"><div><h2>오늘의 산업·거시 브리핑</h2><div class="small">네이버 증권 · 산업 · 투자전략 · 경제 · 채권</div></div><span class="small">${esc(macroNote)}</span></div>${reportList(macro, "산업·거시 리포트를 갱신 중입니다. 리포트 수집 모드를 한 번 실행해 주세요.")}</section></div><aside class="report-side"><section class="panel"><div class="eyebrow">HOW TO READ</div><h2>읽는 방법</h2><p class="report-side-copy">산업·거시 요약은 공개 리포트 본문의 앞부분을 자동으로 짧게 발췌한 안내입니다. 투자 판단 전에는 반드시 원문과 발간일을 확인하세요.</p><div class="metric"><div class="metric-label">마지막 리포트 갱신</div><div class="metric-value">${research.updatedAt ? researchDate(String(research.updatedAt).slice(0, 10).replaceAll("-", "")) : "연결 대기"}</div></div></section><section class="panel etf-report-link"><div class="eyebrow">ETF CHECK</div><h2>ETF·산업 리포트 원문 탐색</h2><p>ETF CHECK의 원문은 출처 사이트에서 직접 확인하도록 연결합니다.</p><a class="report-source-button" href="${esc(etfCheckUrl)}" target="_blank" rel="noopener noreferrer">ETF CHECK에서 리포트 보기 <span aria-hidden="true">↗</span></a><div class="small">출처 이용 조건을 지키기 위해 원문을 복제하거나 자동 저장하지 않습니다.</div></section></aside></section>`);
   };
+  const bokUrl = (value) => {
+    try { const url = new URL(String(value || "")); return url.hostname.endsWith("bok.or.kr") ? url.href : "https://www.bok.or.kr/static/view/popup/rss_popup.html"; } catch { return "https://www.bok.or.kr/static/view/popup/rss_popup.html"; }
+  };
+  const bokBriefingCard = (item) => `<a class="report-card" href="${esc(bokUrl(item.sourceUrl))}" target="_blank" rel="noopener noreferrer"><div class="report-card-head"><span class="report-tag">${esc(item.category || "한국은행 자료")}</span><span class="small">${researchDate(item.publishedAt)}</span></div><h3>${esc(item.title || "제목 없음")}</h3><p>${esc(item.summary || "한국은행 원문에서 세부 내용을 확인하세요.")}</p><span class="report-open">한국은행 원문 보기 <span aria-hidden="true">↗</span></span></a>`;
+  const renderIndustryBriefing = () => {
+    const briefing = state.data.industryBriefing || {}, items = Array.isArray(briefing.items) ? briefing.items : [];
+    const bokSource = briefing.sources?.bok || "https://www.bok.or.kr/static/view/popup/rss_popup.html";
+    const updated = briefing.updatedAt ? new Date(briefing.updatedAt).toLocaleString("ko-KR") : "연결 대기";
+    html("산업 브리핑", "Bank of Korea / News & Research", "한국은행이 공개한 주력산업 모니터링, BOK 이슈노트, 지역 조사연구 및 지역경제보고서를 발간 순으로 모아봅니다. 각 항목은 한국은행 원문으로 연결됩니다.", `<section class="report-status"><div><strong>마지막 확인 ${esc(updated)}</strong><span>공개 RSS 기반 · 평일 수집 주기에 자동 갱신</span></div><a class="text-link" href="${esc(bokUrl(bokSource))}" target="_blank" rel="noopener noreferrer">한국은행 뉴스·자료 전체 보기 ↗</a></section><section class="panel report-section"><div class="panel-head"><div><h2>최신 산업·조사연구 자료</h2><div class="small">주력산업 모니터링 · BOK 이슈노트 · 지역 조사연구 · 지역경제보고서</div></div><span class="small">최대 24건</span></div>${items.length ? `<div class="report-list">${items.map(bokBriefingCard).join("")}</div>` : empty("한국은행 공개 자료를 첫 수집 중입니다. 리포트 수집 모드를 한 번 실행해 주세요.")}</section>`);
+  };
   const stockHistoryTable = (history) => `<div class="table-wrap"><table class="data-table"><thead><tr><th>날짜</th><th>주가</th><th>외국인</th><th>연기금</th><th>기관</th></tr></thead><tbody>${history.map((item, index) => `<tr><td>${longDate(item.date)}${state.data.liveSnapshot?.date === item.date && index === 0 ? " <span class=\"pill\">잠정</span>" : ""}</td><td class="${signClass(item.dailyChangePct)}">${price(item.closePrice)} <small>${pct(item.dailyChangePct)}</small></td><td class="${signClass(item.foreignWon)}">${won(item.foreignWon)}</td><td class="${signClass(item.pensionWon)}">${won(item.pensionWon, "장중 미제공")}</td><td class="${signClass(item.institutionWon)}">${won(item.institutionWon)}</td></tr>`).join("")}</tbody></table></div>`;
   function renderFlowChart(history) {
     const canvas = document.querySelector("#flow-chart");
@@ -353,7 +363,7 @@
     } catch { /* last normal data remains */ }
     if (every && document.visibilityState === "visible") setTimeout(() => updateQuotes(codes, every), every);
   }
-  const render = () => ({ market: renderMarket, reports: renderReports, home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, momentum: renderMomentum }[PAGE] || renderHome)();
+  const render = () => ({ market: renderMarket, reports: renderReports, industry: renderIndustryBriefing, home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, momentum: renderMomentum }[PAGE] || renderHome)();
   async function loadData() {
     try {
       const remote = await api(`/api/data?t=${Date.now()}`);
