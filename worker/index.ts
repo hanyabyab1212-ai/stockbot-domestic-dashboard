@@ -86,29 +86,41 @@ async function naverQuote(code: string) {
   return compactQuote(await response.json<Record<string, unknown>>(), code);
 }
 
-async function koreanIndex(id: string, name: string, symbol: string, description: string) {
+function naverKstUnix(value: unknown): number | null {
+  const raw = String(value ?? "");
+  if (!/^\d{14}$/.test(raw)) return null;
+  const year = Number(raw.slice(0, 4)), month = Number(raw.slice(4, 6)), day = Number(raw.slice(6, 8));
+  const hour = Number(raw.slice(8, 10)), minute = Number(raw.slice(10, 12)), second = Number(raw.slice(12, 14));
+  return Math.floor(Date.UTC(year, month - 1, day, hour - 9, minute, second) / 1000);
+}
+
+async function koreanIndex(id: string, name: string, indexCode: string, description: string) {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
-    const response = await fetch(url, { cf: { cacheTtl: 60, cacheEverything: true } });
-    if (!response.ok) throw new Error(`yahoo index ${response.status}`);
-    const payload = await response.json() as {
-      chart?: { result?: Array<{ meta?: Record<string, unknown>; timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }> };
-    };
-    const result = payload.chart?.result?.[0];
-    const meta = result?.meta ?? {};
-    const timestamps = result?.timestamp ?? [];
-    const closes = result?.indicators?.quote?.[0]?.close ?? [];
-    const series = timestamps.flatMap((time, index) => {
-      const value = numberOf(closes[index]);
-      return value == null ? [] : [{ time, value }];
+    // Yahoo Finance is blocked from the deployed Worker. Naver's public index endpoints
+    // provide the same-day quote and intraday points without an API key.
+    const request = { headers: { "user-agent": "stockbot-domestic-dashboard/1.0", accept: "application/json" }, cf: { cacheTtl: 60, cacheEverything: true } };
+    const [quoteResponse, chartResponse] = await Promise.all([
+      fetch(`https://polling.finance.naver.com/api/realtime/domestic/index/${encodeURIComponent(indexCode)}`, request),
+      fetch(`https://api.stock.naver.com/chart/domestic/index/${encodeURIComponent(indexCode)}?periodType=day`, request)
+    ]);
+    if (!quoteResponse.ok) throw new Error(`naver index quote ${quoteResponse.status}`);
+    const quotePayload = await quoteResponse.json() as { datas?: Array<Record<string, unknown>> };
+    const quote = compactQuote(quotePayload.datas?.[0] ?? {}, indexCode);
+    const chartPayload = chartResponse.ok ? await chartResponse.json() as {
+      tradeBaseAt?: string;
+      priceInfos?: Array<{ localDateTime?: string; currentPrice?: unknown }>;
+    } : {};
+    const day = String(chartPayload.tradeBaseAt ?? "");
+    const intraday = (chartPayload.priceInfos ?? []).flatMap((point) => {
+      const timestamp = naverKstUnix(point.localDateTime);
+      const value = numberOf(point.currentPrice);
+      return timestamp == null || value == null || (day && !String(point.localDateTime).startsWith(day)) ? [] : [{ time: timestamp, value }];
     });
-    const last = series.at(-1)?.value ?? null;
-    const price = numberOf(meta.regularMarketPrice) ?? last;
-    const previous = numberOf(meta.regularMarketPreviousClose ?? meta.chartPreviousClose ?? meta.previousClose);
-    const change = price != null && previous != null ? price - previous : null;
-    return { id, name, symbol, description, price, change, changePct: change != null && previous ? change / previous * 100 : null, asOf: numberOf(meta.regularMarketTime) ?? timestamps.at(-1) ?? null, source: "Yahoo Finance", series };
+    // Naver publishes one-minute bars. The dashboard intentionally draws every fifth bar.
+    const series = intraday.filter((_, index) => index % 5 === 0 || index === intraday.length - 1);
+    return { id, name, symbol: indexCode, description, price: quote.price, change: quote.change, changePct: quote.changePct, asOf: quote.tradedAt, source: "네이버페이 증권", series };
   } catch {
-    return { id, name, symbol, description, price: null, change: null, changePct: null, asOf: null, source: "Yahoo Finance", series: [], error: "연결 대기" };
+    return { id, name, symbol: indexCode, description, price: null, change: null, changePct: null, asOf: null, source: "네이버페이 증권", series: [], error: "연결 대기" };
   }
 }
 
@@ -130,8 +142,8 @@ async function marketData() {
     }
   }));
   const indices = await Promise.all([
-    koreanIndex("kospi", "KOSPI", "^KS11", "코스피 종합주가지수"),
-    koreanIndex("kosdaq", "KOSDAQ", "^KQ11", "코스닥 종합주가지수")
+    koreanIndex("kospi", "KOSPI", "KOSPI", "코스피 종합주가지수"),
+    koreanIndex("kosdaq", "KOSDAQ", "KOSDAQ", "코스닥 종합주가지수")
   ]);
   return { updatedAt: new Date().toISOString(), macro, indices };
 }
