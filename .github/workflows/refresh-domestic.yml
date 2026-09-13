@@ -7,7 +7,7 @@ on:
         description: 수집 모드
         required: true
         type: choice
-        options: [close, intraday]
+        options: [close, intraday, reports]
         default: close
       force:
         description: 휴장일·장중시간 검사 무시

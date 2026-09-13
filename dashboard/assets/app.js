@@ -8,7 +8,7 @@
   const selectedCodeFromUrl = new URLSearchParams(location.search).get("code");
   const state = { data: FALLBACK, selectedCode: /^\d{6}$/.test(selectedCodeFromUrl || "") ? selectedCodeFromUrl : "005930", days: 7, actor: "foreignWon", direction: "buy", etfCategory: "업종별", momentumMode: "high", market: "유가", period: "day", directionMove: "up", marketIndex: "kospi", marketData: null };
   const nav = [
-    ["market", "market.html", "오늘의 시장", "◉"], ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
+    ["market", "market.html", "오늘의 시장", "◉"], ["reports", "reports.html", "리포트 브리핑", "▤"], ["macro", "macro.html", "거시지표", "◎"], ["home", "index.html", "특이동향", "✦"], ["stocks", "stocks.html", "종목별 검색", "⌕"], ["rankings", "rankings.html", "누적 수급 순위", "≡"], ["etf", "etf.html", "ETF 자금흐름", "◫"], ["momentum", "momentum.html", "52주 신고가·등락률", "↗"]
   ];
   const number = (value, fallback = null) => {
     const parsed = Number(value);
@@ -234,6 +234,29 @@
       if (PAGE === "market") renderMarket({ refresh: false });
     } catch { /* 마지막 마감 데이터와 연결 대기 상태를 유지한다 */ }
   }
+  const researchDate = (value) => /^\d{8}$/.test(String(value || "")) ? longDate(value) : "-";
+  const researchUrl = (value) => {
+    try {
+      const url = new URL(String(value || ""));
+      return url.origin === "https://stock.naver.com" && url.pathname.startsWith("/research/") ? url.href : "https://stock.naver.com/research";
+    } catch { return "https://stock.naver.com/research"; }
+  };
+  const reportTarget = (value) => Number.isFinite(Number(value)) && Number(value) > 0 ? `${Math.round(Number(value)).toLocaleString("ko-KR")}원` : "";
+  const reportCard = (item) => {
+    const company = [item.company, item.companyCode ? `(${item.companyCode})` : ""].filter(Boolean).join(" ");
+    const details = [company, item.broker, item.analyst, item.opinion, reportTarget(item.targetPrice)].filter(Boolean).join(" · ");
+    const highlights = Array.isArray(item.highlights) ? item.highlights.slice(0, 2) : [];
+    return `<a class="report-card" href="${esc(researchUrl(item.sourceUrl))}" target="_blank" rel="noopener noreferrer"><div class="report-card-head"><span class="report-tag">${esc(item.category || "리포트")}</span><span class="small">${researchDate(item.publishedAt)}</span></div><h3>${esc(item.title || "제목 없음")}</h3>${details ? `<div class="report-meta">${esc(details)}</div>` : ""}<p>${esc(item.summary || "원문에서 핵심 내용을 확인하세요.")}</p>${highlights.length ? `<ul>${highlights.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>` : ""}<span class="report-open">네이버 증권 원문 보기 <span aria-hidden="true">↗</span></span></a>`;
+  };
+  const reportList = (items, message) => items.length ? `<div class="report-list">${items.map(reportCard).join("")}</div>` : empty(message);
+  const renderReports = () => {
+    const research = state.data.research || {}, company = Array.isArray(research.company) ? research.company : [], macro = Array.isArray(research.macro) ? research.macro : [];
+    const naverUrl = research.sources?.naver || "https://stock.naver.com/research";
+    const etfCheckUrl = research.sources?.etfCheck || "https://www.etfcheck.co.kr/mobile/main";
+    const companyNote = research.companyUsesLatest ? "당일 업로드가 없어 가장 최근 공개 리포트를 표시합니다." : "당일 공개된 리포트를 우선 표시합니다.";
+    const macroNote = research.macroUsesLatest ? "당일 업로드가 없어 가장 최근 공개 리포트를 표시합니다." : "당일 공개된 리포트를 우선 표시합니다.";
+    html("리포트 브리핑", "Daily Research Brief", "네이버 증권에 공개된 기업·산업·거시 리포트의 핵심 문장을 짧게 발췌하고, 모든 카드는 원문으로 연결합니다.", `<section class="report-status"><div><strong>기준일 ${researchDate(research.referenceDate)}</strong><span>자동 발췌 요약 · 원문 링크 제공</span></div><a class="text-link" href="${esc(naverUrl)}" target="_blank" rel="noopener noreferrer">네이버 증권 리서치 전체 보기 ↗</a></section><section class="report-layout"><div class="report-main"><section class="panel report-section"><div class="panel-head"><div><h2>기업 리포트</h2><div class="small">개별 기업의 실적·투자의견·목표주가</div></div><span class="small">${esc(companyNote)}</span></div>${reportList(company, "기업 리포트를 갱신 중입니다. 리포트 수집 모드를 한 번 실행해 주세요.")}</section><section class="panel report-section"><div class="panel-head"><div><h2>산업·거시 브리핑</h2><div class="small">산업 · 투자전략 · 경제 · 채권</div></div><span class="small">${esc(macroNote)}</span></div>${reportList(macro, "산업·거시 리포트를 갱신 중입니다. 리포트 수집 모드를 한 번 실행해 주세요.")}</section></div><aside class="report-side"><section class="panel"><div class="eyebrow">HOW TO READ</div><h2>읽는 방법</h2><p class="report-side-copy">요약은 공개 리포트 본문의 앞부분을 자동으로 짧게 발췌한 안내입니다. 투자 판단 전에는 반드시 원문과 발간일을 확인하세요.</p><div class="metric"><div class="metric-label">마지막 리포트 갱신</div><div class="metric-value">${research.updatedAt ? researchDate(String(research.updatedAt).slice(0, 10).replaceAll("-", "")) : "연결 대기"}</div></div></section><section class="panel etf-report-link"><div class="eyebrow">ETF CHECK</div><h2>ETF·산업 리포트 탐색</h2><p>ETF CHECK의 원문은 출처 사이트에서 직접 확인하도록 연결합니다.</p><a class="report-source-button" href="${esc(etfCheckUrl)}" target="_blank" rel="noopener noreferrer">ETF CHECK에서 리포트 보기 <span aria-hidden="true">↗</span></a><div class="small">출처 이용 조건을 지키기 위해 원문을 복제하거나 자동 저장하지 않습니다.</div></section></aside></section>`);
+  };
   const stockHistoryTable = (history) => `<div class="table-wrap"><table class="data-table"><thead><tr><th>날짜</th><th>주가</th><th>외국인</th><th>연기금</th><th>기관</th></tr></thead><tbody>${history.map((item, index) => `<tr><td>${longDate(item.date)}${state.data.liveSnapshot?.date === item.date && index === 0 ? " <span class=\"pill\">잠정</span>" : ""}</td><td class="${signClass(item.dailyChangePct)}">${price(item.closePrice)} <small>${pct(item.dailyChangePct)}</small></td><td class="${signClass(item.foreignWon)}">${won(item.foreignWon)}</td><td class="${signClass(item.pensionWon)}">${won(item.pensionWon, "장중 미제공")}</td><td class="${signClass(item.institutionWon)}">${won(item.institutionWon)}</td></tr>`).join("")}</tbody></table></div>`;
   function renderFlowChart(history) {
     const canvas = document.querySelector("#flow-chart");
@@ -325,7 +348,7 @@
     } catch { /* last normal data remains */ }
     if (every && document.visibilityState === "visible") setTimeout(() => updateQuotes(codes, every), every);
   }
-  const render = () => ({ market: renderMarket, home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, momentum: renderMomentum }[PAGE] || renderHome)();
+  const render = () => ({ market: renderMarket, reports: renderReports, home: renderHome, stocks: renderStocks, rankings: renderRankings, etf: renderEtf, macro: renderMacro, momentum: renderMomentum }[PAGE] || renderHome)();
   async function loadData() {
     try {
       const remote = await api(`/api/data?t=${Date.now()}`);

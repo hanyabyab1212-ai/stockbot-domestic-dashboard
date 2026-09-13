@@ -8,12 +8,13 @@ import { collectMacroSnapshot } from "../src/macroService.mjs";
 import { collectEtfRows } from "../src/etfService.mjs";
 import { markHighUpdateDate } from "../src/marketRankings.mjs";
 import { collectInvestorTrends } from "../src/investorTrendService.mjs";
+import { collectResearchBriefing } from "../src/researchService.mjs";
 
 loadLocalEnv();
 const args = new Set(process.argv.slice(2));
 const requestedMode = [...args].find((value) => value.startsWith("--mode="))?.slice(7) || "auto";
 const force = args.has("--force");
-if (!["auto", "close", "intraday"].includes(requestedMode)) throw new Error("--mode은 auto, close, intraday 중 하나여야 합니다.");
+if (!["auto", "close", "intraday", "reports"].includes(requestedMode)) throw new Error("--mode은 auto, close, intraday, reports 중 하나여야 합니다.");
 
 const kst = currentKstParts();
 const inMarketHours = kst.minutes >= 9 * 60 && kst.minutes <= 15 * 60 + 30;
@@ -24,6 +25,17 @@ const previousDate = (compactDate) => {
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10).replaceAll("-", "");
 };
+
+const previous = await loadCloudState();
+if (requestedMode === "reports") {
+  log("네이버 증권 공개 리포트 브리핑을 갱신합니다.");
+  const research = await collectResearchBriefing({ referenceDate: kst.date, previous: previous.research });
+  const data = mergeDashboard(previous, { liveSnapshot: previous.liveSnapshot || null, research, automation: { source: "github-actions", reportUpdatedDate: kst.date } });
+  const synced = await syncCloudState(data);
+  await writeFallback(data);
+  log(`리포트 브리핑 동기화 완료 · version ${synced.version} · 기업 ${research.company.length}건 · 산업·거시 ${research.macro.length}건`);
+  process.exit(0);
+}
 
 async function previousOpenDate(client, date) {
   let candidate = previousDate(date);
@@ -45,7 +57,6 @@ const collectionDate = mode === "close" && !todayCloseAvailable ? await previous
 if (collectionDate !== kst.date) log(`오늘 마감 데이터가 아직 없거나 휴장일이므로 최근 거래일 ${collectionDate} 데이터를 사용합니다.`);
 
 log("KRX/TradingView 종목 마스터를 불러옵니다.");
-const previous = await loadCloudState();
 let master;
 let marketRanks;
 let loadedMarketRanks = false;
@@ -95,7 +106,9 @@ if (mode === "close") {
 }
 log("무료 거시지표를 갱신합니다.");
 const macro = await collectMacroSnapshot({ bokApiKey: process.env.BOK_ECOS_API_KEY, eiaApiKey: process.env.EIA_API_KEY, previous: previous.macro });
-const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, investorTrends, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length } });
+log("네이버 증권 공개 리포트 브리핑을 갱신합니다.");
+const research = await collectResearchBriefing({ referenceDate: collectionDate, previous: previous.research });
+const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, investorTrends, research, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length, reportUpdatedDate: kst.date } });
 const synced = await syncCloudState(data);
 await writeFallback(data);
 log(`동기화 완료 · version ${synced.version} · ${result.rows.length}행`);

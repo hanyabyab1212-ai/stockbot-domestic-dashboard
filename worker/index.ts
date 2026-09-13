@@ -13,6 +13,7 @@ const EMPTY_DASHBOARD = {
   etfRows: [],
   marketRanks: {},
   investorTrends: { rows: [] },
+  research: { company: [], macro: [] },
   automation: { source: "cloudflare-r2", mode: "uninitialized", records: 0, failed: 0 }
 };
 const DATA_KEY = "dashboard.json";

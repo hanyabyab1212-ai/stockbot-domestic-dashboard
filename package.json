@@ -8,6 +8,7 @@
     "test": "node --test automation/test/*.test.mjs",
     "refresh": "node automation/tools/refresh_dashboard_cloud.mjs",
     "refresh:close": "node automation/tools/refresh_dashboard_cloud.mjs --mode=close",
-    "refresh:intraday": "node automation/tools/refresh_dashboard_cloud.mjs --mode=intraday"
+    "refresh:intraday": "node automation/tools/refresh_dashboard_cloud.mjs --mode=intraday",
+    "refresh:reports": "node automation/tools/refresh_dashboard_cloud.mjs --mode=reports"
   }
 }
