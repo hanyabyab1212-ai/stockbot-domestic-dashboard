@@ -9,10 +9,11 @@ test("공개 리포트 HTML에서 짧은 발췌 문장을 만든다", () => {
 });
 
 test("기업 리포트는 메타정보와 네이버 원문 주소를 유지한다", () => {
-  const item = normalizeResearchItem({ nid: "1234", title: "테스트 기업", itemName: "알파냥", itemCode: "000001", brokerName: "테스트증권", analystName: "홍길동", writeDate: "2026-09-13", opinionText: "매수", goalPrice: "123,000", content: "첫 번째 핵심 내용입니다. 두 번째 핵심 내용입니다." }, "company");
+  const item = normalizeResearchItem({ nid: "1234", title: "테스트 기업", itemName: "알파냥", itemCode: "000001", brokerName: "테스트증권", analystName: "홍길동", readCount: "1,234", writeDate: "2026-09-13", opinionText: "매수", goalPrice: "123,000", content: "첫 번째 핵심 내용입니다. 두 번째 핵심 내용입니다." }, "company");
   assert.equal(item.company, "알파냥");
   assert.equal(item.targetPrice, 123000);
   assert.equal(item.publishedAt, "20260913");
+  assert.equal(item.readCount, 1234);
   assert.equal(item.sourceUrl, "https://stock.naver.com/research/company/1234");
 });
 

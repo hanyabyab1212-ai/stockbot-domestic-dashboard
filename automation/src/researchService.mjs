@@ -59,6 +59,7 @@ export function normalizeResearchItem(item, type) {
     companyCode: String(item.itemCode || ""),
     broker: String(item.brokerName || ""),
     analyst: String(item.analystName || ""),
+    readCount: Number(String(item.readCount || "0").replaceAll(",", "")) || 0,
     publishedAt: compactDate(item.writeDate),
     opinion: String(item.opinionText || item.opinionType || ""),
     targetPrice: item.goalPrice == null || item.goalPrice === "" ? null : Number(String(item.goalPrice).replaceAll(",", "")) || null,
