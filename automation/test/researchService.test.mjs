@@ -17,16 +17,19 @@ test("기업 리포트는 메타정보와 네이버 원문 주소를 유지한�
   assert.equal(item.sourceUrl, "https://stock.naver.com/research/company/1234");
 });
 
-test("당일 리포트가 없으면 유형별로 가장 최근 공개 리포트를 남긴다", async () => {
+test("네이버 첫 화면의 인기 리포트와 산업·거시 리포트를 함께 수집한다", async () => {
   const fetchImpl = async (url) => {
     const type = String(url).match(/v2\/([^?]+)/)?.[1];
-    const item = { nid: `${type}-1`, title: `${type} 리포트`, writeDate: type === "company" ? "2026-09-12" : "2026-09-13", content: "첫 번째 핵심 내용입니다. 두 번째 핵심 내용입니다.", itemName: type === "company" ? "테스트 기업" : "" };
+    if (type === "weekly-hot") return { ok: true, json: async () => ({ researchList: [{ ranking: "1", type: "company", nid: "hot-1", title: "인기 리포트", itemCode: "005930", brokerName: "테스트증권", readCount: "4,321", writeDate: "2026-09-12" }] }) };
+    const item = { nid: `${type}-1`, title: `${type} 리포트`, writeDate: "2026-09-13", content: "첫 번째 핵심 내용입니다. 두 번째 핵심 내용입니다." };
     return { ok: true, json: async () => ({ items: [item] }) };
   };
-  const result = await collectResearchBriefing({ referenceDate: "20260913", fetchImpl, now: new Date("2026-09-13T02:00:00Z") });
-  assert.equal(result.companyUsesLatest, true);
+  const result = await collectResearchBriefing({ referenceDate: "20260913", stockNames: { "005930": "삼성전자" }, fetchImpl, now: new Date("2026-09-13T02:00:00Z") });
+  assert.equal(result.companyUsesLatest, false);
   assert.equal(result.macroUsesLatest, false);
-  assert.equal(result.company[0].publishedAt, "20260912");
+  assert.equal(result.company[0].title, "인기 리포트");
+  assert.equal(result.company[0].company, "삼성전자");
+  assert.equal(result.company[0].readCount, 4321);
   assert.equal(result.macro.length, 4);
   assert.equal(result.failedTypes.length, 0);
 });

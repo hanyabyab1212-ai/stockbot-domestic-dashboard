@@ -27,9 +27,10 @@ const previousDate = (compactDate) => {
 };
 
 const previous = await loadCloudState();
+const previousStockNames = Object.fromEntries((previous.rows || []).map((row) => [row[1], row[2]]));
 if (requestedMode === "reports") {
   log("네이버 증권 공개 리포트 브리핑을 갱신합니다.");
-  const research = await collectResearchBriefing({ referenceDate: kst.date, previous: previous.research });
+  const research = await collectResearchBriefing({ referenceDate: kst.date, previous: previous.research, stockNames: previousStockNames });
   const data = mergeDashboard(previous, { liveSnapshot: previous.liveSnapshot || null, research, automation: { source: "github-actions", reportUpdatedDate: kst.date } });
   const synced = await syncCloudState(data);
   await writeFallback(data);
@@ -107,7 +108,8 @@ if (mode === "close") {
 log("무료 거시지표를 갱신합니다.");
 const macro = await collectMacroSnapshot({ bokApiKey: process.env.BOK_ECOS_API_KEY, eiaApiKey: process.env.EIA_API_KEY, previous: previous.macro });
 log("네이버 증권 공개 리포트 브리핑을 갱신합니다.");
-const research = await collectResearchBriefing({ referenceDate: collectionDate, previous: previous.research });
+const stockNames = { ...previousStockNames, ...Object.fromEntries(master.map((item) => [item.code, item.name])) };
+const research = await collectResearchBriefing({ referenceDate: collectionDate, previous: previous.research, stockNames });
 const data = mergeDashboard(previous, { closeRows: mode === "close" ? result.rows : [], liveSnapshot, etfRows, marketRanks, macro, investorTrends, research, automation: { source: "github-actions", mode: mode === "intraday" ? "intraday-estimate" : "close", updatedDate: collectionDate, records: result.rows.length, failed: result.failed.length, reportUpdatedDate: kst.date } });
 const synced = await syncCloudState(data);
 await writeFallback(data);

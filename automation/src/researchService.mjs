@@ -1,11 +1,17 @@
 const NAVER_RESEARCH_BASE = "https://stock.naver.com/api/stockSecurity/researches/v2";
 
 export const RESEARCH_TYPES = {
-  company: { label: "기업", path: "company" },
   industry: { label: "산업", path: "industry" },
   invest: { label: "투자전략", path: "invest" },
   economy: { label: "경제", path: "economy" },
   debenture: { label: "채권", path: "debenture" }
+};
+
+const dateBefore = (compact, days) => {
+  const value = compactDate(compact);
+  const date = new Date(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
 };
 
 const decodeEntities = (value) => String(value || "")
@@ -47,7 +53,7 @@ export function researchHighlights(content, limit = 3) {
 const compactDate = (value) => String(value || "").replace(/[^0-9]/g, "").slice(0, 8);
 
 export function normalizeResearchItem(item, type) {
-  const meta = RESEARCH_TYPES[type];
+  const meta = type === "company" ? { label: "기업", path: "company" } : RESEARCH_TYPES[type];
   if (!meta || !item?.nid) return null;
   const highlights = researchHighlights(item.content);
   return {
@@ -60,6 +66,7 @@ export function normalizeResearchItem(item, type) {
     broker: String(item.brokerName || ""),
     analyst: String(item.analystName || ""),
     readCount: Number(String(item.readCount || "0").replaceAll(",", "")) || 0,
+    ranking: Number(item.ranking) || null,
     publishedAt: compactDate(item.writeDate),
     opinion: String(item.opinionText || item.opinionType || ""),
     targetPrice: item.goalPrice == null || item.goalPrice === "" ? null : Number(String(item.goalPrice).replaceAll(",", "")) || null,
@@ -67,6 +74,21 @@ export function normalizeResearchItem(item, type) {
     highlights: highlights.slice(1),
     sourceUrl: `https://stock.naver.com/research/${meta.path}/${encodeURIComponent(item.nid)}`
   };
+}
+
+async function fetchWeeklyHot({ referenceDate, stockNames = {}, fetchImpl }) {
+  const startDate = dateBefore(referenceDate, 7);
+  const response = await fetchImpl(`${NAVER_RESEARCH_BASE}/weekly-hot?startDate=${encodeURIComponent(startDate)}&size=10`, {
+    headers: {
+      accept: "application/json",
+      referer: "https://stock.naver.com/research",
+      "user-agent": "alphanyang-stockbot/1.0 (public report index)"
+    }
+  });
+  if (!response.ok) throw new Error(`네이버 인기 리포트 조회 실패: ${response.status}`);
+  const payload = await response.json();
+  const source = Array.isArray(payload?.researchList) ? payload.researchList : [];
+  return source.map((item) => normalizeResearchItem({ ...item, itemName: item.itemName || stockNames[String(item.itemCode || "")] || "" }, "company")).filter(Boolean);
 }
 
 async function fetchResearchType(type, { size, fetchImpl }) {
@@ -89,20 +111,20 @@ const currentOrLatest = (items, referenceDate, limit) => {
   return { items: (current.length ? current : sorted).slice(0, limit), usesLatest: !current.length };
 };
 
-export async function collectResearchBriefing({ referenceDate, previous = null, fetchImpl = fetch, now = new Date() } = {}) {
+export async function collectResearchBriefing({ referenceDate, previous = null, stockNames = {}, fetchImpl = fetch, now = new Date() } = {}) {
   const kstParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
   const dateFromNow = Object.fromEntries(kstParts.filter((part) => ["year", "month", "day"].includes(part.type)).map((part) => [part.type, part.value]));
   const date = compactDate(referenceDate) || `${dateFromNow.year}${dateFromNow.month}${dateFromNow.day}`;
   const types = Object.keys(RESEARCH_TYPES);
-  const requests = await Promise.allSettled(types.map((type) => fetchResearchType(type, { size: type === "company" ? 24 : 16, fetchImpl })));
+  const requests = await Promise.allSettled([fetchWeeklyHot({ referenceDate: date, stockNames, fetchImpl }), ...types.map((type) => fetchResearchType(type, { size: 16, fetchImpl }))]);
   const successful = new Map();
   const failedTypes = [];
   requests.forEach((result, index) => {
-    const type = types[index];
+    const type = index === 0 ? "company" : types[index - 1];
     if (result.status === "fulfilled") successful.set(type, result.value);
     else failedTypes.push(type);
   });
-  const company = currentOrLatest(successful.get("company") || previous?.company || [], date, 12);
+  const company = { items: successful.get("company") || previous?.company || [], usesLatest: false };
   const macroItems = ["industry", "invest", "economy", "debenture"].flatMap((type) => {
     const current = successful.get(type);
     return current?.length ? current : (previous?.macro || []).filter((item) => item.type === type);
